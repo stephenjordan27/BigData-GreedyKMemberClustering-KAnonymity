@@ -1,0 +1,52 @@
+[error] sbt.librarymanagement.ResolveException: Error downloading org.apache.spark:spark-core_2.12:2.2.0
+[error]   Not found
+[error]   Not found
+[error]   not found: C:\Users\asus\.ivy2\local\org.apache.spark\spark-core_2.12\2.2.0\ivys\ivy.xml
+[error]   not found: https://repo1.maven.org/maven2/org/apache/spark/spark-core_2.12/2.2.0/spark-core_2.12-2.2.0.pom
+[error] 	at lmcoursier.CoursierDependencyResolution.unresolvedWarningOrThrow(CoursierDependencyResolution.scala:245)
+[error] 	at lmcoursier.CoursierDependencyResolution.$anonfun$update$34(CoursierDependencyResolution.scala:214)
+[error] 	at lmcoursier.CoursierDependencyResolution$$Lambda$4770/222080389.apply(Unknown Source)
+[error] 	at scala.util.Either$LeftProjection.map(Either.scala:573)
+[error] 	at lmcoursier.CoursierDependencyResolution.update(CoursierDependencyResolution.scala:214)
+[error] 	at sbt.librarymanagement.DependencyResolution.update(DependencyResolution.scala:60)
+[error] 	at sbt.internal.LibraryManagement$.resolve$1(LibraryManagement.scala:52)
+[error] 	at sbt.internal.LibraryManagement$.$anonfun$cachedUpdate$12(LibraryManagement.scala:102)
+[error] 	at sbt.internal.LibraryManagement$$$Lambda$2611/1027795013.apply(Unknown Source)
+[error] 	at sbt.util.Tracked$.$anonfun$lastOutput$1(Tracked.scala:69)
+[error] 	at sbt.util.Tracked$$$Lambda$2562/194574416.apply(Unknown Source)
+[error] 	at sbt.internal.LibraryManagement$.$anonfun$cachedUpdate$20(LibraryManagement.scala:115)
+[error] 	at sbt.internal.LibraryManagement$$$Lambda$2613/601553403.apply(Unknown Source)
+[error] 	at scala.util.control.Exception$Catch.apply(Exception.scala:228)
+[error] 	at sbt.internal.LibraryManagement$.$anonfun$cachedUpdate$11(LibraryManagement.scala:115)
+[error] 	at sbt.internal.LibraryManagement$.$anonfun$cachedUpdate$11$adapted(LibraryManagement.scala:96)
+[error] 	at sbt.internal.LibraryManagement$$$Lambda$2607/335618454.apply(Unknown Source)
+[error] 	at sbt.util.Tracked$.$anonfun$inputChanged$1(Tracked.scala:150)
+[error] 	at sbt.util.Tracked$$$Lambda$2410/630787652.apply(Unknown Source)
+[error] 	at sbt.internal.LibraryManagement$.cachedUpdate(LibraryManagement.scala:129)
+[error] 	at sbt.Classpaths$.$anonfun$updateTask0$5(Defaults.scala:2946)
+[error] 	at sbt.Classpaths$$$Lambda$1276/626941486.apply(Unknown Source)
+[error] 	at scala.Function1.$anonfun$compose$1(Function1.scala:49)
+[error] 	at scala.Function1$$Lambda$910/663277822.apply(Unknown Source)
+[error] 	at sbt.internal.util.$tilde$greater.$anonfun$$u2219$1(TypeFunctions.scala:62)
+[error] 	at sbt.internal.util.$tilde$greater$$Lambda$2267/19400322.apply(Unknown Source)
+[error] 	at sbt.std.Transform$$anon$4.work(Transform.scala:67)
+[error] 	at sbt.Execute.$anonfun$submit$2(Execute.scala:281)
+[error] 	at sbt.Execute$$Lambda$2284/1592275050.apply(Unknown Source)
+[error] 	at sbt.internal.util.ErrorHandling$.wideConvert(ErrorHandling.scala:19)
+[error] 	at sbt.Execute.work(Execute.scala:290)
+[error] 	at sbt.Execute.$anonfun$submit$1(Execute.scala:281)
+[error] 	at sbt.Execute$$Lambda$2275/766089249.apply(Unknown Source)
+[error] 	at sbt.ConcurrentRestrictions$$anon$4.$anonfun$submitValid$1(ConcurrentRestrictions.scala:178)
+[error] 	at sbt.ConcurrentRestrictions$$anon$4$$Lambda$2282/1713520020.apply(Unknown Source)
+[error] 	at sbt.CompletionService$$anon$2.call(CompletionService.scala:37)
+[error] 	at java.util.concurrent.FutureTask.run(FutureTask.java:266)
+[error] 	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:511)
+[error] 	at java.util.concurrent.FutureTask.run(FutureTask.java:266)
+[error] 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)
+[error] 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)
+[error] 	at java.lang.Thread.run(Thread.java:745)
+[error] (ssExtractDependencies) sbt.librarymanagement.ResolveException: Error downloading org.apache.spark:spark-core_2.12:2.2.0
+[error]   Not found
+[error]   Not found
+[error]   not found: C:\Users\asus\.ivy2\local\org.apache.spark\spark-core_2.12\2.2.0\ivys\ivy.xml
+[error]   not found: https://repo1.maven.org/maven2/org/apache/spark/spark-core_2.12/2.2.0/spark-core_2.12-2.2.0.pom

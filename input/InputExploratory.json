@@ -1,0 +1,26 @@
+{
+  "input_path": "C:/Users/asus/IdeaProjects/AnonymizationWithBigData/input/adult100k.csv",
+  "output_path": "C:/Users/asus/IdeaProjects/AnonymizationWithBigData/output/exploratory-analysis/",
+  "selected_column": [
+      {
+        "attrName": "age",
+        "dataType": "numeric"
+      },
+      {
+        "attrName": "race",
+        "dataType": "category"
+      },
+      {
+        "attrName": "sex",
+        "dataType": "category"
+      },
+      {
+        "attrName": "workclass",
+        "dataType": "category"
+      },
+      {
+        "attrName": "income",
+        "dataType": "category"
+      }
+  ]
+}

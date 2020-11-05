@@ -1,0 +1,31 @@
+{
+  "input_path": "C:/Users/asus/IdeaProjects/AnonymizationWithBigData/input/adult100k.csv",
+  "output_path": "C:/Users/asus/IdeaProjects/AnonymizationWithBigData/output/",
+  "model_name": "k_means",
+  "selected_column": [
+      {
+        "attrName": "age",
+        "dataType": "numeric"
+      },
+      {
+        "attrName": "race",
+        "dataType": "category"
+      },
+      {
+        "attrName": "sex",
+        "dataType": "category"
+      },
+      {
+        "attrName": "income",
+        "dataType": "category"
+      }
+  ],
+  "k_means": {
+      "k": 2
+  },
+  "naive_bayes": {
+      "label": "income",
+      "training_set": 0.7,
+      "test_set": 0.3
+  }
+}

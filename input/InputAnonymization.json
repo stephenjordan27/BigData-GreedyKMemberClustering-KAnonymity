@@ -1,0 +1,194 @@
+{
+  "k": 2,
+  "num_sample_datas": 5,
+  "input_path": "C:/Users/asus/IdeaProjects/AnonymizationWithBigData/input/adult100k.csv",
+  "output_path": "C:/Users/asus/IdeaProjects/AnonymizationWithBigData/output/",
+  "identifier": [
+      {
+        "attrName": "name",
+        "dataType": "category"
+      }
+  ],
+  "sensitive_identifier": [
+      {
+        "attrName": "income",
+        "dataType": "category"
+      }
+  ],
+  "quasi_identifier": [
+      {
+        "attrName": "age",
+        "dataType": "numeric"
+      },
+      {
+        "attrName": "race",
+        "dataType": "category"
+      },
+      {
+        "attrName": "sex",
+        "dataType": "category"
+      },
+      {
+        "attrName": "workclass",
+        "dataType": "category"
+      }
+  ],
+  "domain_generalization_hierarchy": {
+      "race":[
+          {
+            "value": "Person",
+            "parent": "Person",
+            "level": "1",
+            "position": "null"
+          },
+          {
+            "value": "Oriental",
+            "parent": "Person",
+            "level": "2",
+            "position": "left"
+          },
+          {
+            "value": "General",
+            "parent": "Person",
+            "level": "2",
+            "position": "right"
+          },
+          {
+            "value": "Amer-Indian-Eskimo",
+            "parent": "Oriental",
+            "level": "3",
+            "position": "left"
+          },
+          {
+            "value": "Asian",
+            "parent": "Oriental",
+            "level": "3",
+            "position": "right"
+          },
+          {
+            "value": "White",
+            "parent": "General",
+            "level": "3",
+            "position": "left"
+          },
+          {
+            "value": "Black",
+            "parent": "General",
+            "level": "3",
+            "position": "right"
+          }
+      ],
+      "sex":[
+          {
+            "value": "Adult",
+            "parent": "Adult",
+            "level": "1",
+            "position": "null"
+          },
+          {
+            "value": "Female",
+            "parent": "Adult",
+            "level": "2",
+            "position": "left"
+          },
+          {
+            "value": "Male",
+            "parent": "Adult",
+            "level": "2",
+            "position": "right"
+          }
+      ],
+      "workclass":[
+        {
+          "value": "Employee",
+          "parent": "Employee",
+          "level": "1",
+          "position": "null"
+        },
+        {
+          "value": "Gov-employee",
+          "parent": "Employee",
+          "level": "2",
+          "position": "left"
+        },
+        {
+          "value": "Local-employee",
+          "parent": "Employee",
+          "level": "2",
+          "position": "right"
+        },
+        {
+          "value": "Gov",
+          "parent": "Gov-employee",
+          "level": "3",
+          "position": "left"
+        },
+        {
+          "value": "Other-gov",
+          "parent": "Gov-employee",
+          "level": "3",
+          "position": "right"
+        },
+        {
+          "value": "Self-emp",
+          "parent": "Local-employee",
+          "level": "3",
+          "position": "left"
+        },
+        {
+          "value": "Others",
+          "parent": "Local-employee",
+          "level": "3",
+          "position": "right"
+        },
+        {
+          "value": "State-gov",
+          "parent": "Government",
+          "level": "4",
+          "position": "left"
+        },
+        {
+          "value": "Federal-gov",
+          "parent": "Government",
+          "level": "4",
+          "position": "right"
+        },
+        {
+          "value": "Self-emp-not-inc",
+          "parent": "Self-emp",
+          "level": "4",
+          "position": "left"
+        },
+        {
+          "value": "Self-emp-inc",
+          "parent": "Self-emp",
+          "level": "4",
+          "position": "right"
+        },
+        {
+          "value": "Private",
+          "parent": "Others",
+          "level": "4",
+          "position": "left"
+        },
+        {
+          "value": "Never-worked",
+          "parent": "Others",
+          "level": "4",
+          "position": "right"
+        },
+        {
+          "value": "Local-gov",
+          "parent": "Others-gov",
+          "level": "4",
+          "position": "left"
+        },
+        {
+          "value": "Without-pay",
+          "parent": "Others-gov",
+          "level": "4",
+          "position": "right"
+        }
+      ]
+  }
+}
