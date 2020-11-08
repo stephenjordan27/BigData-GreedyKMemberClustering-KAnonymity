@@ -65,7 +65,7 @@ object MainAnonymization {
 
     // 3. Melakukan anonimisasi pada data yang telah dikelompokan menggunakan k-anonymity
     val KAnonymity = new KAnonymity()
-    val kanonymityDF = KAnonymity.k_anonymity(spark,json,gkmcDF)
+    val kanonymityDF = KAnonymity.k_anonymity(spark,json,gkmcDF,listDataType)
 
     // 4. Menyimpan hasil pengelompokan data ke dalam CSV
     kanonymityDF.coalesce(1)

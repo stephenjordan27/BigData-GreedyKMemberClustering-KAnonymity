@@ -6,3 +6,5 @@ id,age,race,sex,workclass,income
 5,28,Black,Female,Private,<=50K
 6,37,White,Female,Private,<=50K
 7,49,Black,Female,Private,<=50K
+8,52,White,Male,Self-emp-not-inc,>50K
+9,31,White,Female,Private,>50K

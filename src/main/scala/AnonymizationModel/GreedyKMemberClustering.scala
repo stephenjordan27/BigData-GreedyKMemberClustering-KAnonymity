@@ -1,7 +1,7 @@
 package AnonymizationModel
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.functions.{lit, rand, udf}
+import org.apache.spark.sql.functions.{col, countDistinct, lit, rand}
 import org.apache.spark.sql.types.{DataType, IntegerType}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 
@@ -32,23 +32,6 @@ class GreedyKMemberClustering {
     var cluster_name:String = ""
     var index = 1
 
-    val informationLossUDF = udf {
-      // Parameter UDF
-      (
-        cluster: DataFrame, clusterSize: Int, listColumnName: List[String],
-        listDataType: Array[DataType],listNumDistinctValues: ListBuffer[Int],
-        listCategoricalDistinctValues:ListBuffer[Array[Row]]
-      ) =>
-      // Calling Function
-      calculate_information_loss(spark,json,cluster,clusterSize,listColumnName,
-        listDataType, listNumDistinctValues,listCategoricalDistinctValues)
-    }
-
-
-    spark.udf.register("informationLossUDF", informationLossUDF)
-
-
-
     // Apabila jumlah data >= k, maka lakukan perulangan
     while (S_size >= k){
       r = S.orderBy(rand()).limit(1)
@@ -57,8 +40,9 @@ class GreedyKMemberClustering {
       r = furthest_record_from_r(spark,S_temp,r,json) // 5 detik
 
       // Membuang record r dari tabel S (1)
-      S_temp = S_temp.except(r)
       S_size -= 1
+      S_temp = S_temp.except(r).repartition(getNumPartitions(S_size)).cache()
+
 
       // Membuat penamaan sebuah cluster
       cluster_name = "Cluster "+ index
@@ -78,28 +62,20 @@ class GreedyKMemberClustering {
       while ( c_size < k ){
 
         // Menghitung nilai unik masing-masing kolom
-        var listNumDistinctValues = new ListBuffer[Int]
-        var listCategoricalDistinctValues = new ListBuffer[Array[Row]]
-        val listColumnName = list_of_all_attribute(spark,c)
-        listColumnName.foreach{ colName =>
-          val distinctValues = c.select(colName).distinct().cache()
-          listNumDistinctValues += distinctValues.count().toInt
-          listCategoricalDistinctValues += distinctValues.collect()
-          distinctValues.unpersist()
-        }
-
+        val listNumDistinctValues = c.select(c.columns.map(c =>
+                                    countDistinct(col(c)).alias(c)): _*).first().toSeq
 
         // Mencari record terbaik sebagai anggota cluster (c)
-
-        r = find_best_record(spark,sc,json,S_temp,c_temp,listColumnName,S_size,c_size,listDataType,listNumDistinctValues,listCategoricalDistinctValues)
+        r = find_best_record(spark,sc,json,S_temp,c,listColumnName,S_size,c_size,listDataType,listNumDistinctValues)
 
         // Mengelompokan data terhadap c -> find best record
         c = c.union(r)
         c_size += 1
 
         // Membuang record r dari tabel S (2)
-        S_temp = S_temp.except(r)
         S_size -= 1
+        S_temp = S_temp.except(r).repartition(getNumPartitions(S_size)).cache()
+
 
         // Menambahan kolom nama cluster dan info pada record r
         r_temp = r.withColumn("Cluster",lit(cluster_name))
@@ -128,8 +104,9 @@ class GreedyKMemberClustering {
       r = S_temp.orderBy(rand()).limit(1).cache()
 
       // Membuang record r dari tabel S (3)
-      S_temp = S_temp.except(r)
       S_size -= 1
+      S_temp = S_temp.except(r).repartition(getNumPartitions(S_size)).cache()
+
 
       // Mencari cluster terbaik (c) untuk anggota record r
       c = find_best_cluster(spark,json,clusters,r,listClusterName,listColumnName,k,listDataType)
@@ -160,21 +137,23 @@ class GreedyKMemberClustering {
     return columnName
   }
 
-  def find_best_record(spark: SparkSession, sc: SparkContext, json: DataFrame, S: DataFrame, c: DataFrame, listColumnName: List[String], S_size: Int, c_size: Int, listDataType: Array[DataType], listNumDistinctValues: ListBuffer[Int], listCategoricalDistinctValues:ListBuffer[Array[Row]]): DataFrame = {
+  def find_best_record(spark: SparkSession, sc: SparkContext, json: DataFrame, S: DataFrame, c: DataFrame, listColumnName: List[String], S_size: Int, c_size: Int, listDataType: Array[DataType], listNumDistinctValues: Seq[Any]): DataFrame = {
+    spark.sqlContext.clearCache()
+
     var best:DataFrame = null
     var min:Double = Int.MaxValue
     var unclustered_record_size = S_size
     var unclustered_record = S
 
     while(unclustered_record_size > 0){
-      val r = unclustered_record.limit(1)
-      val diff = calculate_substraction_information_loss(spark,json,c,r,listColumnName,c_size, listDataType,listNumDistinctValues, listCategoricalDistinctValues) // 38 detik - 1 iterasi                 //error
+      val r = unclustered_record.limit(1).cache()
+      val diff = calculate_substraction_information_loss(spark,json,c,r,listColumnName,c_size, listDataType,listNumDistinctValues) // 38 detik - 1 iterasi                 //error
       if(diff < min){
         min = diff
         best = r
       }
       unclustered_record_size -= 1
-      unclustered_record = unclustered_record.except(r)
+      unclustered_record = unclustered_record.except(r).repartition(getNumPartitions(unclustered_record_size)).cache()
     }
     return best
   }
@@ -186,28 +165,23 @@ class GreedyKMemberClustering {
 
     // Untuk seluruh baris data, lakukan perulangan berikut
     listClusterName.foreach{ row => // setiap cluster
+      spark.sqlContext.clearCache()
+
       val clusterName = row.getString(0)
       val c = clusters.where(clusters("Cluster").contains(clusterName)) // cluster i
-      val c_temp = c.drop("Cluster","Info")
+      val c_temp = c.drop("Cluster","Info").cache
 
       // Menghitung nilai unik masing-masing kolom
-      var listNumDistinctValues = new ListBuffer[Int]
-      var listCategoricalDistinctValues = new ListBuffer[Array[Row]]
-      val listColumnName = list_of_all_attribute(spark,c_temp)
-
-      listColumnName.foreach{ colName =>
-        val distinctValues = c.select(colName).distinct()
-        val numDistincetValues = distinctValues.count().toInt
-        listNumDistinctValues += numDistincetValues
-        listCategoricalDistinctValues += distinctValues.collect()
-      }
+      val listNumDistinctValues = c_temp.select(c_temp.columns.map(c =>
+                                  countDistinct(col(c)).alias(c)): _*).first().toSeq
 
       // Menghitung selisih information loss
-      val diff = calculate_substraction_information_loss(spark,json,c_temp,r,listColumnName,c_size, listDataType,listNumDistinctValues, listCategoricalDistinctValues)
+      val diff = calculate_substraction_information_loss(spark,json,c_temp,r,listColumnName,c_size, listDataType,listNumDistinctValues)
       if (diff < min) {
         min = diff
         best = c
       }
+
     }
     return best
   }
@@ -218,9 +192,11 @@ class GreedyKMemberClustering {
     var result = ListBuffer[Seq[String]]()
 
     try{
-      val dgh_json = df.select("domain_generalization_hierarchy." + category)
+      val tree = df.select("domain_generalization_hierarchy."+ category+".tree").collect()(0).getString(0)
+      val dgh_json = df.select("domain_generalization_hierarchy." + category+".generalization")
       val dgh = dgh_json.collect()
       val dghArr = dgh.map(row => row.getSeq[Row](0))
+      result += Seq[String](tree)
       dghArr.foreach(dgh_variables => {
         dgh_variables.map(row => {
           result += row.toSeq.asInstanceOf[Seq[String]]
@@ -304,6 +280,7 @@ class GreedyKMemberClustering {
               if(dgh != null){
                 val category1 = row(i).toString
                 val category2 = r_values(i).toString
+                val treeName = dgh.remove(0)(0)
                 record_distance += calculate_categorical_distance(dgh, category1, category2)
               }
             }
@@ -331,7 +308,7 @@ class GreedyKMemberClustering {
 
   def calculate_numeric_distance(num1: Int, num2: Int, max:Int, min:Int): Double = {
     try{
-      val result:Double =  Math.abs(num1-num2)/Math.abs(max-min)
+      val result:Double =  Math.abs(num1-num2)*1.0/Math.abs(max-min)
       return BigDecimal(result).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
     }
     catch {
@@ -345,7 +322,7 @@ class GreedyKMemberClustering {
   def calculate_numeric_distance_information_loss(max_num: Int, min_num: Int, cluster_size: Int): Double = {
     var result:Double = 0.0
     try{
-      result = Math.abs(max_num-min_num)/cluster_size
+      result = Math.abs(max_num-min_num)*1.0/cluster_size
       result = BigDecimal(result).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
       return result
     }
@@ -368,7 +345,7 @@ class GreedyKMemberClustering {
       val LCA_root_name = LCA.findLCA(binaryTree.root, node1.name, node2.name)
       val H_subtree = binaryTree.search(LCA_root_name).level
       val H_TD = binaryTree.getHeight(binaryTree.root).toDouble
-      result = H_subtree / H_TD
+      result = H_subtree*1.0 / H_TD
     }
     result = BigDecimal(result).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
     return result
@@ -379,7 +356,7 @@ class GreedyKMemberClustering {
     val binaryTree = create_binary_tree_from_dgh_attribute(dgh)
     val H_subtree = 1.0
     val H_TD = binaryTree.getHeight(binaryTree.root)
-    result = H_subtree / H_TD
+    result = H_subtree*1.0 / H_TD
     result = BigDecimal(result).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
     return result
   }
@@ -388,25 +365,30 @@ class GreedyKMemberClustering {
     return numeric_distance+categorical_distance
   }
 
-  def calculate_substraction_information_loss(spark: SparkSession, json: DataFrame, c: DataFrame, r : DataFrame, listColumnName: List[String], c_size:Int, listDataType: Array[DataType], listNumDistinctValues: ListBuffer[Int], listCategoricalDistinctValues:ListBuffer[Array[Row]]): Double={
+  def calculate_substraction_information_loss(spark: SparkSession, json: DataFrame, c: DataFrame, r : DataFrame, listColumnName: List[String], c_size:Int, listDataType: Array[DataType], listNumDistinctValues: Seq[Any]): Double={
     var information_loss_c = 0.0
-    try{
-      val information_loss_c_union_r = calculate_information_loss(spark,json,c.union(r),c_size,listColumnName,listDataType,listNumDistinctValues,listCategoricalDistinctValues)
-    }
-    catch {
-      case x: Exception => {
-        print("")
-      }
-    }
-    val information_loss_c_union_r = calculate_information_loss(spark,json,c.union(r),c_size,listColumnName,listDataType,listNumDistinctValues,listCategoricalDistinctValues)
+
+    spark.sqlContext.clearCache()
+
+    import org.apache.spark.sql.functions.{col, countDistinct}
+
+    val union = c.union(r).cache
+    val listNumDistinctValuesUnion = union.select(union.columns.map(c =>
+                                     countDistinct(col(c)).alias(c)): _*).first().toSeq
+    val information_loss_c_union_r = calculate_information_loss(spark,json,union,c_size,listColumnName,listDataType,listNumDistinctValuesUnion)
+
     if(c_size > 1){
-      information_loss_c = calculate_information_loss(spark,json,c,c_size,listColumnName,listDataType,listNumDistinctValues,listCategoricalDistinctValues)
+      val cluster = c.cache()
+      val listNumDistinctValuesCluster = listNumDistinctValues
+      information_loss_c = calculate_information_loss(spark,json,cluster,c_size,listColumnName,listDataType,listNumDistinctValuesCluster)
     }
+
     val substraction_information_loss = information_loss_c_union_r - information_loss_c
+
     return substraction_information_loss
   }
 
-  def calculate_information_loss(spark: SparkSession, json: DataFrame,  cluster: DataFrame, clusterSize: Int, listColumnName: List[String], listDataType: Array[DataType],listNumDistinctValues: ListBuffer[Int],listCategoricalDistinctValues:ListBuffer[Array[Row]]): Double = {
+  def calculate_information_loss(spark: SparkSession, json: DataFrame,  cluster: DataFrame, clusterSize: Int, listColumnName: List[String], listDataType: Array[DataType],listNumDistinctValues: Seq[Any]): Double = {
       var information_loss:Double = 0.0
 
       //////////////////////////////////////////////baris ini bermasalah//////////////////////////////////////////////////
@@ -426,13 +408,17 @@ class GreedyKMemberClustering {
 
               if(dgh != null) {
 
+                val treeName = dgh.remove(0)(0)
+
                 // Menjaga Lowest Common Ancestor hanya dilakukan jika 2 values unik saja
-                if (listNumDistinctValues(i) > 2) {
+                if (listNumDistinctValues(i).toString.toInt > 2) {
                   information_loss += calculate_categorical_distance_information_loss(dgh)
                 }
-                else if(listNumDistinctValues(i) == 2){
-                  val category1 = listCategoricalDistinctValues(i)(0).getString(0)
-                  val category2 = listCategoricalDistinctValues(i)(1).getString(0)
+                else if(listNumDistinctValues(i).toString.toInt == 2){
+
+                  val listCategoricalDistinctValues = cluster.select(colName).distinct().collect()
+                  val category1 = listCategoricalDistinctValues(0).getString(0)
+                  val category2 = listCategoricalDistinctValues(1).getString(0)
                   information_loss += calculate_categorical_distance(dgh,category1,category2)
                 }
                 else{
@@ -457,6 +443,12 @@ class GreedyKMemberClustering {
       //////////////////////////////////////////////baris ini bermasalah////////////////////////////////////////////////
       return clusterSize*information_loss
 
+  }
+
+  def getNumPartitions(size:Int):Int = {
+    var numPartitions = 1
+    if(size >= 9)  numPartitions = size/9
+    return numPartitions
   }
 
 }

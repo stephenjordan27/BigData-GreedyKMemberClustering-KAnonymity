@@ -1,18 +1,19 @@
 package AnonymizationModel
 
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.{col, countDistinct, lit}
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 class KAnonymity extends java.io.Serializable{
 
-  def k_anonymity(spark: SparkSession,json:DataFrame,clusters: DataFrame): DataFrame ={
+  def k_anonymity(spark: SparkSession,json:DataFrame,clusters: DataFrame, listDataType: Array[DataType]): DataFrame ={
     var result: DataFrame = spark.emptyDataFrame
 
     var clusters_temp = clusters
-    var numClusters = clusters.select("Cluster").distinct().count()
+    var numClusters = clusters.select("Cluster").distinct().count().toInt
     val columnName = list_of_all_attribute(spark,clusters_temp)
 
     // Perulangan untuk setiap cluster
@@ -22,29 +23,27 @@ class KAnonymity extends java.io.Serializable{
         val clusterDF = clusters_temp.where(clusters_temp("Cluster").contains(clusterName))
 
         var clusterAnonymization: DataFrame = clusterDF.select("id")
-        var recordDistinctValues = spark.emptyDataFrame
-        var numDistinctValues = 0
+
 
         //////////////////////////////////////////////baris ini bermasalah////////////////////////////////////////////////
         // Perulangan untuk setiap kolom
-        columnName.foreach { colName =>  // looping
-          recordDistinctValues =  clusterDF.select(colName).distinct() // distinct record per 1 column
-          recordDistinctValues.cache()
-          numDistinctValues = recordDistinctValues.count().toInt
+
+        val listNumDistinctValuesCluster = clusterDF.select(clusterDF.columns.map(c =>
+                                           countDistinct(col(c)).alias(c)): _*).first().toSeq
+
+        columnName.zipWithIndex.foreach { case(colName,i) =>  // looping
 
           if(colName != "id") {
-            val columnValue = recordDistinctValues.first().get(0)
-
-            if (numDistinctValues > 1 && columnValue.isInstanceOf[Int]) {
-              val maxValue = recordDistinctValues.groupBy().max(colName).first().getInt(0)
-              val minValue = recordDistinctValues.groupBy().min(colName).first().getInt(0)
+            if (listNumDistinctValuesCluster(i).toString.toInt > 1 && listDataType(i).isInstanceOf[IntegerType]) {
+              val maxValue = clusterDF.groupBy().max(colName).first().getInt(0)
+              val minValue = clusterDF.groupBy().min(colName).first().getInt(0)
               val generalizationNumeric = "[" + minValue + "-" + maxValue + "]"
               clusterAnonymization = clusterAnonymization.withColumn(colName, lit(generalizationNumeric))
             }
             else {
               val dgh = read_dgh_from_json(json, colName)
 
-              if (numDistinctValues > 1 && columnValue.isInstanceOf[String] && dgh != null) {
+              if (listNumDistinctValuesCluster(i).toString.toInt > 1 && listDataType(i).isInstanceOf[StringType] && dgh != null) {
                 val binaryTree = create_binary_tree_from_dgh_attribute(dgh)
                 val generalizationCategorical = binaryTree.root.name // bagian anonimisasi
                 clusterAnonymization = clusterAnonymization.withColumn(colName, lit(generalizationCategorical))
@@ -58,14 +57,17 @@ class KAnonymity extends java.io.Serializable{
             }
 
           }
-          recordDistinctValues.unpersist()
+
         }
         //////////////////////////////////////////////baris ini bermasalah////////////////////////////////////////////////
 
         if(result.isEmpty) result = clusterAnonymization
         else result = result.union(clusterAnonymization)
-        clusters_temp = clusters_temp.except(clusterDF)
+
         numClusters -= 1
+        clusters_temp = clusters_temp.except(clusterDF).repartition(getNumPartitions(numClusters)).cache()
+
+
       }
       catch {
         case x: Exception => {
@@ -103,9 +105,11 @@ class KAnonymity extends java.io.Serializable{
     var result = ListBuffer[Seq[String]]()
 
     try{
-      val dgh_json = df.select("domain_generalization_hierarchy." + category)
+      val tree = df.select("domain_generalization_hierarchy."+ category+".tree").collect()(0).getString(0)
+      val dgh_json = df.select("domain_generalization_hierarchy." + category+".generalization")
       val dgh = dgh_json.collect()
       val dghArr = dgh.map(row => row.getSeq[Row](0))
+      result += Seq[String](tree)
       dghArr.foreach(dgh_variables => {
         dgh_variables.map(row => {
           result += row.toSeq.asInstanceOf[Seq[String]]
@@ -155,6 +159,12 @@ class KAnonymity extends java.io.Serializable{
       }
     }
     return tree
+  }
+
+  def getNumPartitions(size:Int):Int = {
+    var numPartitions = 1
+    if(size >= 9)  numPartitions = size/9
+    return numPartitions
   }
 
 }
