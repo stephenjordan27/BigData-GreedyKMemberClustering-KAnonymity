@@ -15,7 +15,10 @@ object MainAnonymization {
       .appName("Anonymization with Big Data")
       .getOrCreate()
 
-    val sc = spark.sparkContext
+    spark.conf.set("spark.executor.memory", "12g")
+    spark.conf.set("spark.driver.memory", "9g")
+
+    val sc= spark.sparkContext
 
 //    spark.conf.set("spark.executor.instances", "4")
 //    spark.conf.set("spark.executor.cores", "5");
@@ -38,7 +41,13 @@ object MainAnonymization {
 
     // Membatasi record yang dipakai untuk eksperimen
     val numSampleDatas = json.select("num_sample_datas").first().getLong(0).toInt
-    val S = columnSelectionWithID.where("id <= "+numSampleDatas).cache()
+    val S = columnSelectionWithID.where("id <= "+numSampleDatas).repartition(9).cache()
+
+    // Melihat jumlah rekord untuk masing-masing partisi
+    import spark.implicits._
+    S.rdd.mapPartitionsWithIndex{case (i,rows) => Iterator((i,rows.size))}
+                         .toDF("partition_number","number_of_records").show
+
     S.coalesce(1)
       .write
       .option("header","true")
@@ -60,12 +69,15 @@ object MainAnonymization {
           .mode("overwrite")
           .csv(path_data_output+"greedy-k-member-clustering")
 
+
     S.unpersist()
     json.unpersist()
 
+    val listDataType2:Array[DataType] = columnSelectionWithID.drop("id").schema.fields.map(f => f.dataType)
+
     // 3. Melakukan anonimisasi pada data yang telah dikelompokan menggunakan k-anonymity
     val KAnonymity = new KAnonymity()
-    val kanonymityDF = KAnonymity.k_anonymity(spark,json,gkmcDF)
+    val kanonymityDF = KAnonymity.k_anonymity(spark,json,gkmcDF, listDataType2)
 
     // 4. Menyimpan hasil pengelompokan data ke dalam CSV
     kanonymityDF.coalesce(1)

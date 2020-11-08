@@ -1,0 +1,10 @@
+id,age,race,sex,workclass,income,Cluster
+9,31,White,Female,Private,>50K,Cluster 1
+5,28,Black,Female,Private,<=50K,Cluster 1
+7,49,Black,Female,Private,<=50K,Cluster 1
+3,38,White,Male,Private,<=50K,Cluster 2
+6,37,White,Female,Private,<=50K,Cluster 2
+8,52,White,Male,Self-emp-not-inc,>50K,Cluster 2
+1,39,White,Male,State-gov,<=50K,Cluster 3
+2,50,White,Male,Self-emp-not-inc,<=50K,Cluster 3
+4,53,Black,Male,Private,<=50K,Cluster 3
