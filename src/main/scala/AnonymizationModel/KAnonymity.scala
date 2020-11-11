@@ -7,12 +7,11 @@ import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-class KAnonymity extends java.io.Serializable{
+class KAnonymity {
 
   def k_anonymity(spark: SparkSession,json:DataFrame,clusters: DataFrame, listDataType: Array[DataType]): DataFrame ={
-    var result: DataFrame = spark.emptyDataFrame
-
     var clusters_temp = clusters
+    var result: DataFrame = spark.emptyDataFrame
     var numClusters = clusters.select("Cluster").distinct().count().toInt
     val columnName = list_of_all_attribute(spark,clusters_temp)
 
@@ -21,15 +20,12 @@ class KAnonymity extends java.io.Serializable{
       try{
         val clusterName = clusters_temp.select("Cluster").first().getString(0)
         val clusterDF = clusters_temp.where(clusters_temp("Cluster").contains(clusterName))
-
         var clusterAnonymization: DataFrame = clusterDF.select("id")
-
 
         //////////////////////////////////////////////baris ini bermasalah////////////////////////////////////////////////
         // Perulangan untuk setiap kolom
-
         val listNumDistinctValuesCluster = clusterDF.select(clusterDF.columns.map(c =>
-                                           countDistinct(col(c)).alias(c)): _*).first().toSeq
+                                           countDistinct(col(c)).alias(c)): _*).first()
 
         columnName.zipWithIndex.foreach { case(colName,i) =>  // looping
 
@@ -42,7 +38,6 @@ class KAnonymity extends java.io.Serializable{
             }
             else {
               val dgh = read_dgh_from_json(json, colName)
-
               if (listNumDistinctValuesCluster(i).toString.toInt > 1 && listDataType(i).isInstanceOf[StringType] && dgh != null) {
                 val binaryTree = create_binary_tree_from_dgh_attribute(dgh)
                 val generalizationCategorical = binaryTree.root.name // bagian anonimisasi
@@ -53,21 +48,17 @@ class KAnonymity extends java.io.Serializable{
                 clusterAnonymization = clusterAnonymization.join(column, clusterAnonymization("id") === column("id_temp"))
                 clusterAnonymization = clusterAnonymization.drop("id_temp")
               }
-
             }
-
           }
 
         }
         //////////////////////////////////////////////baris ini bermasalah////////////////////////////////////////////////
 
         if(result.isEmpty) result = clusterAnonymization
-        else result = result.union(clusterAnonymization)
+        else result = result.union(clusterAnonymization).repartition(1)
 
         numClusters -= 1
         clusters_temp = clusters_temp.except(clusterDF).repartition(getNumPartitions(numClusters)).cache()
-
-
       }
       catch {
         case x: Exception => {

@@ -11,7 +11,10 @@ object MainAnonymization {
   def main(args:Array[String]): Unit = {
 
     val spark = SparkSession.builder
-      .master("local[*]")
+      .master("local[4]")
+//      .config("spark.shuffle.memoryFraction","0.1")
+//      .config("spark.storage.memoryFraction","0.1")
+      .config("spark.driver.memoryOverhead","2g")
       .appName("Anonymization with Big Data")
       .getOrCreate()
 
