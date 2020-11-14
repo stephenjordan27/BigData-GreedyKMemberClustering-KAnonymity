@@ -55,10 +55,10 @@ class KAnonymity {
         //////////////////////////////////////////////baris ini bermasalah////////////////////////////////////////////////
 
         if(result.isEmpty) result = clusterAnonymization
-        else result = result.union(clusterAnonymization).repartition(1)
+        else result = result.union(clusterAnonymization)
 
         numClusters -= 1
-        clusters_temp = clusters_temp.except(clusterDF).repartition(getNumPartitions(numClusters)).cache()
+        clusters_temp = clusters_temp.except(clusterDF).cache()
       }
       catch {
         case x: Exception => {

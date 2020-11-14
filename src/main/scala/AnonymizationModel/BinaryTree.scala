@@ -1,7 +1,7 @@
 package AnonymizationModel
 
 // https://www.geeksforgeeks.org/binary-tree-set-1-introduction/
-class BinaryTree(key: String) {
+class BinaryTree(key: String) extends Serializable {
 
   var root: Node = null
 

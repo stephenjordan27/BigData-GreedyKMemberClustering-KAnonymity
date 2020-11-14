@@ -6,19 +6,29 @@ import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 
 import scala.collection.mutable.ListBuffer
 
-object MainAnonymization {
+object MainAnonymization  {
+
 
   def main(args:Array[String]): Unit = {
 
+
     val spark = SparkSession.builder
-      .master("local[4]")
+      .master("local[2]")
 //      .config("spark.shuffle.memoryFraction","0.1")
 //      .config("spark.storage.memoryFraction","0.1")
-      .config("spark.driver.memoryOverhead","2g")
+//      .config("spark.driver.memoryOverhead","2g")
+//      .config("spark.driver.memory", "4g")
+//      .config("spark.memory.offHeap.enabled",true)
+//      .config("spark.memory.offHeap.size","3g")
+//      .config("spark.maxRemoteBlockSizeFetchToMem","1g")
+//      .config("spark.locality.wait","60000")
+      .config("spark.driver.memory","4g")
       .appName("Anonymization with Big Data")
       .getOrCreate()
 
     val sc = spark.sparkContext
+
+
 
 //    spark.conf.set("spark.executor.instances", "4")
 //    spark.conf.set("spark.executor.cores", "5");

@@ -2,7 +2,7 @@ package AnonymizationModel
 
 import scala.collection.mutable.ListBuffer
 
-class LowestCommonAncestor {
+class LowestCommonAncestor extends Serializable {
     var path1: ListBuffer[String] = ListBuffer[String]()
     var path2: ListBuffer[String] = ListBuffer[String]()
 
