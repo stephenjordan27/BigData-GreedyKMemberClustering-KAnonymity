@@ -1,64 +1,80 @@
 package AnonymizationModel
 
+import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-import org.apache.spark.sql.functions.{col, countDistinct, lit}
-import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 class KAnonymity {
 
-  def k_anonymity(spark: SparkSession,json:DataFrame,clusters: DataFrame, listDataType: Array[DataType]): DataFrame ={
+  def convert_to_numeric_anonymous = udf ( (listNum: Seq[Int]) => {
+    val maxValue = listNum.max
+    val minValue = listNum.min
+    "[" + minValue + "-" + maxValue + "]"
+  })
+
+  def convert_to_category_anonymous(binaryTree: BinaryTree) = udf ( (listCategory: Seq[String]) => {
+    if(listCategory.length > 1){
+      binaryTree.root.name
+    }
+    else{
+      listCategory.head.toString()
+    }
+
+  })
+
+  def k_anonymity(spark: SparkSession,json:DataFrame,clusters: DataFrame, listDataType: Array[DataType], listBinaryTree:ListBuffer[BinaryTree]): DataFrame ={
+    import org.apache.spark.sql.functions._
+
     var clusters_temp = clusters
-    var result: DataFrame = spark.emptyDataFrame
+    var result: DataFrame = null
     var numClusters = clusters.select("Cluster").distinct().count().toInt
-    val columnName = list_of_all_attribute(spark,clusters_temp)
 
     // Perulangan untuk setiap cluster
     while(numClusters > 0){
       try{
-        val clusterName = clusters_temp.select("Cluster").first().getString(0)
+        val clusterName = "Cluster "+numClusters
         val clusterDF = clusters_temp.where(clusters_temp("Cluster").contains(clusterName))
-        var clusterAnonymization: DataFrame = clusterDF.select("id")
-
+        var clusterDistinctDF = clusterDF.select(clusterDF.columns.map(c => collect_set(col(c)).alias(c) ): _*)
         //////////////////////////////////////////////baris ini bermasalah////////////////////////////////////////////////
-        // Perulangan untuk setiap kolom
-        val listNumDistinctValuesCluster = clusterDF.select(clusterDF.columns.map(c =>
-                                           countDistinct(col(c)).alias(c)): _*).first()
 
-        columnName.zipWithIndex.foreach { case(colName,i) =>  // looping
+        var i = 1
+        clusterDF.dtypes.foreach { element =>  // looping
 
-          if(colName != "id") {
-            if (listNumDistinctValuesCluster(i).toString.toInt > 1 && listDataType(i).isInstanceOf[IntegerType]) {
-              val maxValue = clusterDF.groupBy().max(colName).first().getInt(0)
-              val minValue = clusterDF.groupBy().min(colName).first().getInt(0)
-              val generalizationNumeric = "[" + minValue + "-" + maxValue + "]"
-              clusterAnonymization = clusterAnonymization.withColumn(colName, lit(generalizationNumeric))
+          if(element._1 != "id" && element._1 != "Cluster") {
+
+            if (element._2.contains("Integer")) {
+              clusterDistinctDF = clusterDistinctDF.withColumn("Anonym_"+element._1,convert_to_numeric_anonymous(col(element._1)))
+              i += 1
             }
             else {
-              val dgh = read_dgh_from_json(json, colName)
-              if (listNumDistinctValuesCluster(i).toString.toInt > 1 && listDataType(i).isInstanceOf[StringType] && dgh != null) {
-                val binaryTree = create_binary_tree_from_dgh_attribute(dgh)
-                val generalizationCategorical = binaryTree.root.name // bagian anonimisasi
-                clusterAnonymization = clusterAnonymization.withColumn(colName, lit(generalizationCategorical))
+              val binaryTree = listBinaryTree(i)
+              if (binaryTree != null) {
+                clusterDistinctDF = clusterDistinctDF.withColumn("Anonym_"+element._1,convert_to_category_anonymous(binaryTree)(col(element._1)) )
+                i += 1
               }
               else {
-                val column = clusterDF.select("id", colName).withColumnRenamed("id", "id_temp")
-                clusterAnonymization = clusterAnonymization.join(column, clusterAnonymization("id") === column("id_temp"))
-                clusterAnonymization = clusterAnonymization.drop("id_temp")
+                clusterDistinctDF = clusterDistinctDF.withColumn("Anonym_"+element._1,col(element._1).getItem(0) )
+                i += 1
               }
+
             }
+
           }
 
         }
+
+        clusterDistinctDF = clusterDistinctDF.select(clusterDistinctDF.columns.filter(colName => colName.startsWith("Anonym")||colName.contains("id")).map(clusterDistinctDF(_)): _*)
+        clusterDistinctDF = clusterDistinctDF.withColumn("id_temp",explode(col("id"))).drop("id")
         //////////////////////////////////////////////baris ini bermasalah////////////////////////////////////////////////
 
-        if(result.isEmpty) result = clusterAnonymization
-        else result = result.union(clusterAnonymization)
+        if(result == null) result = clusterDistinctDF
+        else result = result.union(clusterDistinctDF).repartition(1)
 
         numClusters -= 1
-        clusters_temp = clusters_temp.except(clusterDF).cache()
+        clusters_temp = clusters_temp.except(clusterDF).repartition(1)
       }
       catch {
         case x: Exception => {
@@ -67,13 +83,18 @@ class KAnonymity {
       }
 
     }
-    result = result.drop("Cluster")
 
     import org.apache.spark.sql.functions._
-    result = result.orderBy(asc("id"))
+    spark.sqlContext.clearCache()
+    result = result.orderBy(asc("id_temp")).drop("id")
 
     return result
   }
+
+  def checkNumDistinct = udf ( (num: Int) => {
+    if(num>1) true
+    else false
+  })
 
   def find_node_genaralization_with_level(selectedNode: Node, level: Int): Node = {
     if(selectedNode.level == level){

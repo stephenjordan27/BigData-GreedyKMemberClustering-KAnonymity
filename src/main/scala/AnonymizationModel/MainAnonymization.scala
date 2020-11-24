@@ -4,6 +4,7 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 object MainAnonymization  {
@@ -22,11 +23,9 @@ object MainAnonymization  {
 //      .config("spark.memory.offHeap.size","3g")
 //      .config("spark.maxRemoteBlockSizeFetchToMem","1g")
 //      .config("spark.locality.wait","60000")
-      .config("spark.driver.memory","4g")
+//      .config("spark.driver.memory","4g")
       .appName("Anonymization with Big Data")
       .getOrCreate()
-
-    val sc = spark.sparkContext
 
 
 
@@ -62,7 +61,8 @@ object MainAnonymization  {
 
     // 1. Melakukan pengelompokan data dengan algoritma Greedy k-member clustering
     val GKMC = new GreedyKMemberClustering() // 4 menit
-    val gkmcDF = GKMC.greedy_k_member_clustering(spark,sc,json,S,k,listDataType)
+    val listBinaryTree = create_list_binary_tree_attribute(S,json)
+    val gkmcDF = GKMC.greedy_k_member_clustering(spark,json,S,k,listDataType,listBinaryTree).cache()
 
     // 2. Menyimpan hasil pengelompokan data ke dalam CSV
 
@@ -78,7 +78,7 @@ object MainAnonymization  {
 
     // 3. Melakukan anonimisasi pada data yang telah dikelompokan menggunakan k-anonymity
     val KAnonymity = new KAnonymity()
-    val kanonymityDF = KAnonymity.k_anonymity(spark,json,gkmcDF,listDataType)
+    val kanonymityDF = KAnonymity.k_anonymity(spark,json,gkmcDF,listDataType,listBinaryTree)
 
     // 4. Menyimpan hasil pengelompokan data ke dalam CSV
     kanonymityDF.coalesce(1)
@@ -89,6 +89,83 @@ object MainAnonymization  {
                 .csv(path_data_output+"k-anonymity")
 
 
+  }
+
+  def read_dgh_from_json(json: DataFrame,category: String): ListBuffer[Seq[String]] = {
+    var result = ListBuffer[Seq[String]]()
+
+    try{
+      val tree = json.select("domain_generalization_hierarchy."+ category+".tree").collect()(0).getString(0)
+      val dgh_json = json.select("domain_generalization_hierarchy." + category+".generalization")
+      val dgh = dgh_json.collect()
+      val dghArr = dgh.map(row => row.getSeq[Row](0))
+      result += Seq[String](tree)
+      dghArr.foreach(dgh_variables => {
+        dgh_variables.map(row => {
+          result += row.toSeq.asInstanceOf[Seq[String]]
+        })
+      })
+      return result
+    }
+    catch {
+      case x: Exception => {
+        result = null
+        return result
+      }
+    }
+
+  }
+
+  def create_list_binary_tree_attribute(S: DataFrame, json: DataFrame): ListBuffer[BinaryTree] = {
+    val listBinaryTree = new ListBuffer[BinaryTree]
+    S.columns.foreach{colName =>
+      val dgh = read_dgh_from_json(json,colName)
+      if(dgh!=null){
+        val treeName = dgh.remove(0)(0)
+        listBinaryTree += create_binary_tree_from_dgh_attribute(dgh)
+      }
+      else{
+        listBinaryTree += null
+      }
+    }
+    return listBinaryTree
+  }
+
+  def create_binary_tree_from_dgh_attribute(dgh: ListBuffer[Seq[String]]):BinaryTree = {
+    val tree = new BinaryTree
+    val queue = new mutable.Queue[Node]()
+    var currentNode = new Node("",0)
+    var initialize = true
+
+    //////////////////////////////////////////////baris ini diganti//////////////////////////////////////////////////
+    dgh.foreach { attribute =>  // looping
+      val level = attribute(0).toInt
+      val parent = attribute(1)
+      val position = attribute(2)
+      val value = attribute(3).toString
+
+      if(queue.size == 0){
+        var newNode = new Node(value,level) // ngasih nilai
+        tree.root = newNode
+        queue.enqueue(newNode)
+      }
+      else {
+        if(parent != currentNode.name || initialize){
+          currentNode = queue.dequeue()
+        }
+        if(position == "left"){
+          currentNode.left = new Node(value,level)
+          queue.enqueue(currentNode.left)
+        }
+        else{
+          currentNode.right = new Node(value,level)
+          queue.enqueue(currentNode.right)
+        }
+        initialize = false
+      }
+    }
+    //////////////////////////////////////////////baris ini diganti//////////////////////////////////////////////////
+    return tree
   }
 
   def generate_dataframe_from_csv(spark:SparkSession, json:DataFrame, dataInput: DataFrame):DataFrame={
