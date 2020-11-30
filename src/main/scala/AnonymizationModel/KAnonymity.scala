@@ -1,8 +1,10 @@
 package AnonymizationModel
 
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.storage.StorageLevel
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -25,7 +27,7 @@ class KAnonymity {
 
   })
 
-  def k_anonymity(spark: SparkSession,json:DataFrame,clusters: DataFrame, listDataType: Array[DataType], listBinaryTree:ListBuffer[BinaryTree]): DataFrame ={
+  def k_anonymity(spark: SparkSession,json:DataFrame,clusters: DataFrame, listDataType: Array[DataType], listBinaryTree:ListBuffer[BinaryTree],hdfs:FileSystem): DataFrame ={
     import org.apache.spark.sql.functions._
 
     var clusters_temp = clusters
@@ -71,7 +73,14 @@ class KAnonymity {
         //////////////////////////////////////////////baris ini bermasalah////////////////////////////////////////////////
 
         if(result == null) result = clusterDistinctDF
-        else result = result.union(clusterDistinctDF).repartition(1)
+        else{
+          result = spark.read.format("csv").option("header", "true").schema(result.schema).load("hdfs://localhost:50071/skripsi/kanonymity1/")
+          result = result.union(clusterDistinctDF).repartition(1)
+          result.persist(StorageLevel.MEMORY_AND_DISK)
+          print(result.count())
+          delete_folder_hdfs("/skripsi/temp2/",hdfs)
+          result.coalesce(1).write.option("header", "true").csv("hdfs://localhost:50071/skripsi/kanonymity1/")
+        }
 
         numClusters -= 1
         clusters_temp = clusters_temp.except(clusterDF).repartition(1)
@@ -89,6 +98,13 @@ class KAnonymity {
     result = result.orderBy(asc("id_temp")).drop("id")
 
     return result
+  }
+
+  def delete_folder_hdfs(pathName: String,hdfs:FileSystem) {
+    val path = new Path(pathName)
+    if (hdfs.exists(path)) {
+      hdfs.delete(path, true)
+    }
   }
 
   def checkNumDistinct = udf ( (num: Int) => {

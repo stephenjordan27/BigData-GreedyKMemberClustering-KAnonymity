@@ -1,5 +1,6 @@
 package AnonymizationModel
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
@@ -27,8 +28,6 @@ object MainAnonymization  {
       .appName("Anonymization with Big Data")
       .getOrCreate()
 
-
-
 //    spark.conf.set("spark.executor.instances", "4")
 //    spark.conf.set("spark.executor.cores", "5");
 //
@@ -47,7 +46,6 @@ object MainAnonymization  {
     val k:Int = json.select("k").first().getLong(0).toInt
     val listDataType:Array[DataType] = columnSelectionWithID.schema.fields.map(f => f.dataType)
 
-
     // Membatasi record yang dipakai untuk eksperimen
     val numSampleDatas = json.select("num_sample_datas").first().getLong(0).toInt
     val S = columnSelectionWithID.where("id <= "+numSampleDatas).cache()
@@ -58,11 +56,15 @@ object MainAnonymization  {
       .mode("overwrite")
       .csv(path_data_output+"normal-table")
 
+    // HDFS Configuration
+    val conf = new Configuration()
+    conf.set("fs.default.name", "hdfs://localhost:50071")
+    val hdfs = org.apache.hadoop.fs.FileSystem.get(conf)
 
     // 1. Melakukan pengelompokan data dengan algoritma Greedy k-member clustering
     val GKMC = new GreedyKMemberClustering() // 4 menit
     val listBinaryTree = create_list_binary_tree_attribute(S,json)
-    val gkmcDF = GKMC.greedy_k_member_clustering(spark,json,S,k,listDataType,listBinaryTree).cache()
+    val gkmcDF = GKMC.greedy_k_member_clustering(spark,json,S,k,numSampleDatas,listBinaryTree,hdfs).cache()
 
     // 2. Menyimpan hasil pengelompokan data ke dalam CSV
 
@@ -78,7 +80,7 @@ object MainAnonymization  {
 
     // 3. Melakukan anonimisasi pada data yang telah dikelompokan menggunakan k-anonymity
     val KAnonymity = new KAnonymity()
-    val kanonymityDF = KAnonymity.k_anonymity(spark,json,gkmcDF,listDataType,listBinaryTree)
+    val kanonymityDF = KAnonymity.k_anonymity(spark,json,gkmcDF,listDataType,listBinaryTree,hdfs)
 
     // 4. Menyimpan hasil pengelompokan data ke dalam CSV
     kanonymityDF.coalesce(1)
