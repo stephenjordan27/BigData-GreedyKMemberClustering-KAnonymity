@@ -2,20 +2,167 @@ package AnonymizationModel
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.sql.functions.udf
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-import org.apache.spark.storage.StorageLevel
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 class KAnonymity {
 
-  def convert_to_numeric_anonymous = udf ( (listNum: Seq[Int]) => {
-    val maxValue = listNum.max
-    val minValue = listNum.min
+  def k_anonymity(spark: SparkSession,json:DataFrame,clusters: DataFrame, listDataType: Array[DataType], listBinaryTree:ListBuffer[BinaryTree],hdfs:FileSystem): DataFrame ={
+    import org.apache.spark.sql.functions._
+
+    val clusters_schema:StructType = clusters.schema
+    var clusters_temp:DataFrame = null
+    var result: DataFrame = null
+
+    var numClusters = clusters.select("Cluster").distinct().count().toInt
+    this.delete_folder_hdfs("/skripsi/kanonymity1_tmp/",hdfs)
+    clusters.coalesce(1).write.option("header", "true").
+            csv("hdfs://localhost:50071/skripsi/kanonymity1_tmp/")
+
+    // Perulangan untuk setiap cluster
+    while(numClusters > 0){ //looping
+
+
+      // Baca clusters dari file HDFS
+      this.delete_folder_hdfs("/skripsi/kanonymity1/",hdfs)
+      hdfs.rename(new Path("hdfs://localhost:50071/skripsi/kanonymity1_tmp"),
+                  new Path("hdfs://localhost:50071/skripsi/kanonymity1"))
+      clusters_temp = spark.read.format("csv").option("header", "true").schema(clusters_schema).
+                      load("hdfs://localhost:50071/skripsi/kanonymity1/")
+
+
+      // Mengambil sebuah cluster dari clusters
+      val clusterName = "Cluster "+numClusters
+      var clusterDF = clusters_temp.where(clusters_temp("Cluster").contains(clusterName))
+      val clusterDF_temp = clusterDF
+//      var clusterDistinctDF = clusterDF.select(clusterDF.columns.map(c => collect_set(col(c)).alias(c) ): _*)
+      this.delete_folder_hdfs("/skripsi/kanonymity2_tmp/",hdfs)
+      clusterDF.coalesce(1).write.option("header", "true").
+                csv("hdfs://localhost:50071/skripsi/kanonymity2_tmp/")
+
+      // Melakukan iterasi untuk anonimisasi data
+      var i = 1
+      clusterDF.dtypes.foreach { element =>  // looping
+
+        if(element._1 != "id" && element._1 != "Cluster" && !element._1.contains("_")) {
+
+          if (element._2.contains("Integer")) {
+            // Membaca file HDFS
+            this.delete_folder_hdfs("/skripsi/kanonymity2/",hdfs)
+            hdfs.rename(new Path("hdfs://localhost:50071/skripsi/kanonymity2_tmp"),
+                        new Path("hdfs://localhost:50071/skripsi/kanonymity2"))
+            clusterDF = spark.read.format("csv").option("header", "true").schema(clusters_schema).
+                        load("hdfs://localhost:50071/skripsi/kanonymity2/")
+
+            // Menulis ke file HDFS
+            clusterDF = clusterDF.withColumn("Anonym_"+element._1,convert_to_numeric_anonymous(col("max_"+element._1),col("min_"+element._1)))
+            clusterDF.coalesce(1).write.option("header", "true").
+                      csv("hdfs://localhost:50071/skripsi/kanonymity2_tmp/")
+//            clusterDistinctDF = clusterDistinctDF.withColumn("Anonym_"+element._1,convert_to_numeric_anonymous(col(element._1)))
+            i += 1
+          }
+          else {
+            val binaryTree = listBinaryTree(i)
+
+            // Membaca file HDFS
+            this.delete_folder_hdfs("/skripsi/kanonymity2/",hdfs)
+            hdfs.rename(new Path("hdfs://localhost:50071/skripsi/kanonymity2_tmp"),
+                        new Path("hdfs://localhost:50071/skripsi/kanonymity2"))
+            clusterDF = spark.read.format("csv").option("header", "true").
+                        load("hdfs://localhost:50071/skripsi/kanonymity2/")
+
+            // Menulis file ke HDFS
+            val distinctColumn = clusterDF.select(collect_set(element._1).as("Dist_"+element._1))
+            if (binaryTree != null) {
+              clusterDF = clusterDF.crossJoin(distinctColumn)
+              clusterDF = clusterDF.withColumn("Anonym_"+element._1,convert_to_category_anonymous(binaryTree)(col("Dist_"+element._1)) )
+              clusterDF = clusterDF.drop("Dist_"+element._1)
+              clusterDF.coalesce(1).write.option("header", "true").
+                        csv("hdfs://localhost:50071/skripsi/kanonymity2_tmp/")
+              i += 1
+            }
+            else {
+              clusterDF = clusterDF.crossJoin(distinctColumn)
+              clusterDF = clusterDF.withColumn("Anonym_"+element._1,col("Dist_"+element._1).getItem(0) )
+              clusterDF = clusterDF.drop("Dist_"+element._1)
+              clusterDF.coalesce(1).write.option("header", "true").
+                        csv("hdfs://localhost:50071/skripsi/kanonymity2_tmp/")
+              i += 1
+            }
+
+          }
+
+        }
+
+      }
+
+      // Membaca file HDFS
+      this.delete_folder_hdfs("/skripsi/kanonymity2/",hdfs)
+      hdfs.rename(new Path("hdfs://localhost:50071/skripsi/kanonymity2_tmp"),
+                  new Path("hdfs://localhost:50071/skripsi/kanonymity2"))
+      clusterDF = spark.read.format("csv").option("header", "true").
+                  load("hdfs://localhost:50071/skripsi/kanonymity2/")
+
+      // Mengambil nama column diawali dengan "Anonym"
+      clusterDF = clusterDF.select(clusterDF.columns.filter(colName => colName.startsWith("Anonym")||colName.contains("id")).map(clusterDF(_)): _*)
+
+      // Menyimpan hasil anonimisasi
+      if(result == null) {
+        result = clusterDF
+        this.delete_folder_hdfs("/skripsi/kanonymity3_tmp/",hdfs)
+        result.coalesce(1).write.option("header", "true").csv("hdfs://localhost:50071/skripsi/kanonymity3_tmp/")
+      }
+      else{
+        // Membaca result dari file HDFS
+        this.delete_folder_hdfs("/skripsi/kanonymity3/",hdfs)
+        hdfs.rename(new Path("hdfs://localhost:50071/skripsi/kanonymity3_tmp"),
+                    new Path("hdfs://localhost:50071/skripsi/kanonymity3"))
+        result = spark.read.format("csv").option("header", "true").schema(result.schema).load("hdfs://localhost:50071/skripsi/kanonymity3/")
+
+        // Menggabungkan result
+        result = result.union(clusterDF)
+        delete_folder_hdfs("/skripsi/kanonymity3_tmp/",hdfs)
+        result.coalesce(1).write.option("header", "true").csv("hdfs://localhost:50071/skripsi/kanonymity3_tmp/")
+      }
+
+      // Menyimpan anonimisasi ke HDFS
+      numClusters -= 1
+      if(numClusters == 0){
+        this.delete_folder_hdfs("/skripsi/kanonymity3/",hdfs)
+        hdfs.rename(new Path("hdfs://localhost:50071/skripsi/kanonymity3_tmp"), new Path("hdfs://localhost:50071/skripsi/kanonymity3"))
+      }
+
+      // Membuang cluster yang sudah pernah dianonimisasi
+      clusters_temp = clusters_temp.except(clusterDF_temp).cache()
+      clusters_temp.coalesce(1).write.option("header", "true").
+                    csv("hdfs://localhost:50071/skripsi/kanonymity1_tmp/")
+      if(numClusters == 0){
+        this.delete_folder_hdfs("/skripsi/kanonymity1/",hdfs)
+        hdfs.rename(new Path("hdfs://localhost:50071/skripsi/kanonymity1_tmp"), new Path("hdfs://localhost:50071/skripsi/kanonymity1"))
+      }
+    }
+
+    this.delete_folder_hdfs("/skripsi/kanonymity2/",hdfs)
+    hdfs.rename(new Path("hdfs://localhost:50071/skripsi/kanonymity3_tmp"),
+                new Path("hdfs://localhost:50071/skripsi/kanonymity3"))
+    result = spark.read.format("csv").option("header", "true").schema(result.schema).load("hdfs://localhost:50071/skripsi/kanonymity3/")
+    result = result.orderBy(asc("id"))
+
+    return result
+  }
+
+  def convert_to_numeric_anonymous = udf ( (maxValue: Int, minValue: Int) => {
     "[" + minValue + "-" + maxValue + "]"
   })
+
+//  def convert_to_numeric_anonymous = udf ( (listNum: Seq[Int]) => {
+//    val maxValue = listNum.max
+//    val minValue = listNum.min
+//    "[" + minValue + "-" + maxValue + "]"
+//  })
 
   def convert_to_category_anonymous(binaryTree: BinaryTree) = udf ( (listCategory: Seq[String]) => {
     if(listCategory.length > 1){
@@ -26,79 +173,6 @@ class KAnonymity {
     }
 
   })
-
-  def k_anonymity(spark: SparkSession,json:DataFrame,clusters: DataFrame, listDataType: Array[DataType], listBinaryTree:ListBuffer[BinaryTree],hdfs:FileSystem): DataFrame ={
-    import org.apache.spark.sql.functions._
-
-    var clusters_temp = clusters
-    var result: DataFrame = null
-    var numClusters = clusters.select("Cluster").distinct().count().toInt
-
-    // Perulangan untuk setiap cluster
-    while(numClusters > 0){
-      try{
-        val clusterName = "Cluster "+numClusters
-        val clusterDF = clusters_temp.where(clusters_temp("Cluster").contains(clusterName))
-        var clusterDistinctDF = clusterDF.select(clusterDF.columns.map(c => collect_set(col(c)).alias(c) ): _*)
-        //////////////////////////////////////////////baris ini bermasalah////////////////////////////////////////////////
-
-        var i = 1
-        clusterDF.dtypes.foreach { element =>  // looping
-
-          if(element._1 != "id" && element._1 != "Cluster") {
-
-            if (element._2.contains("Integer")) {
-              clusterDistinctDF = clusterDistinctDF.withColumn("Anonym_"+element._1,convert_to_numeric_anonymous(col(element._1)))
-              i += 1
-            }
-            else {
-              val binaryTree = listBinaryTree(i)
-              if (binaryTree != null) {
-                clusterDistinctDF = clusterDistinctDF.withColumn("Anonym_"+element._1,convert_to_category_anonymous(binaryTree)(col(element._1)) )
-                i += 1
-              }
-              else {
-                clusterDistinctDF = clusterDistinctDF.withColumn("Anonym_"+element._1,col(element._1).getItem(0) )
-                i += 1
-              }
-
-            }
-
-          }
-
-        }
-
-        clusterDistinctDF = clusterDistinctDF.select(clusterDistinctDF.columns.filter(colName => colName.startsWith("Anonym")||colName.contains("id")).map(clusterDistinctDF(_)): _*)
-        clusterDistinctDF = clusterDistinctDF.withColumn("id_temp",explode(col("id"))).drop("id")
-        //////////////////////////////////////////////baris ini bermasalah////////////////////////////////////////////////
-
-        if(result == null) result = clusterDistinctDF
-        else{
-          result = spark.read.format("csv").option("header", "true").schema(result.schema).load("hdfs://localhost:50071/skripsi/kanonymity1/")
-          result = result.union(clusterDistinctDF).repartition(1)
-          result.persist(StorageLevel.MEMORY_AND_DISK)
-          print(result.count())
-          delete_folder_hdfs("/skripsi/temp2/",hdfs)
-          result.coalesce(1).write.option("header", "true").csv("hdfs://localhost:50071/skripsi/kanonymity1/")
-        }
-
-        numClusters -= 1
-        clusters_temp = clusters_temp.except(clusterDF).repartition(1)
-      }
-      catch {
-        case x: Exception => {
-          print("")
-        }
-      }
-
-    }
-
-    import org.apache.spark.sql.functions._
-    spark.sqlContext.clearCache()
-    result = result.orderBy(asc("id_temp")).drop("id")
-
-    return result
-  }
 
   def delete_folder_hdfs(pathName: String,hdfs:FileSystem) {
     val path = new Path(pathName)

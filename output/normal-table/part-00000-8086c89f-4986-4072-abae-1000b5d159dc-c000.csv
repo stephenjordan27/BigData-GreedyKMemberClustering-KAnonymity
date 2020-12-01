@@ -29,3 +29,5 @@ id,age,race,sex,workclass,income
 28,54,Asian-Pac-Islander,Male,?,>50K
 29,39,White,Male,Private,<=50K
 30,49,White,Male,Private,<=50K
+31,23,White,Male,Local-gov,<=50K
+32,20,Black,Male,Private,<=50K
