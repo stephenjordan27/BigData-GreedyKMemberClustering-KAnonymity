@@ -214,7 +214,7 @@ class GreedyKMemberClustering extends Serializable {
     }
   }
 
-  def greedy_k_member_clustering(spark: SparkSession, json: DataFrame, S: DataFrame, k: Int, numSampleDatas:Int, listBinaryTree:ListBuffer[BinaryTree],hdfs:FileSystem): DataFrame = {
+  def greedy_k_member_clustering(spark: SparkSession, json: DataFrame, S: DataFrame, k: Int, numSampleDatas:Int, listBinaryTree:ListBuffer[BinaryTree],hdfs:FileSystem,path_HDFS:String): DataFrame = {
 
     var S_size = numSampleDatas
     val schema = S.schema
@@ -224,8 +224,8 @@ class GreedyKMemberClustering extends Serializable {
     }
 
     // Melakukan inisialisasi keseluruhan
-    this.delete_folder_hdfs("hdfs://localhost:50071/skripsi/gkmc0_tmp/",hdfs)
-    S.write.option("header", "true").csv("hdfs://localhost:50071/skripsi/gkmc0_tmp/")
+    this.delete_folder_hdfs(path_HDFS+"/skripsi/gkmc0_tmp/",hdfs)
+    S.write.option("header", "true").csv(path_HDFS+"/skripsi/gkmc0_tmp/")
     var S_temp:DataFrame = null
     var clusters: DataFrame = null
     var clusters_schema:StructType = null
@@ -241,8 +241,8 @@ class GreedyKMemberClustering extends Serializable {
 
       // Mengambil 1 record secara acak
       this.delete_folder_hdfs("/skripsi/gkmc0/",hdfs)
-      hdfs.rename(new Path("hdfs://localhost:50071/skripsi/gkmc0_tmp"), new Path("hdfs://localhost:50071/skripsi/gkmc0"))
-      S_temp = spark.read.option("header", "true").schema(schema).csv("hdfs://localhost:50071/skripsi/gkmc0/")
+      hdfs.rename(new Path(path_HDFS+"/skripsi/gkmc0_tmp"), new Path(path_HDFS+"/skripsi/gkmc0"))
+      S_temp = spark.read.option("header", "true").schema(schema).csv(path_HDFS+"/skripsi/gkmc0/")
       r = S_temp.orderBy(rand()).limit(1)
 
       // Mencari record tabel S terjauh dengan record r
@@ -253,7 +253,7 @@ class GreedyKMemberClustering extends Serializable {
       S_temp = S_temp.except(r)
 
       // Melakukan overwrite S_temp pada HDFS (1)
-      S_temp.coalesce(1).write.option("header", "true").csv("hdfs://localhost:50071/skripsi/gkmc0_tmp/")
+      S_temp.coalesce(1).write.option("header", "true").csv(path_HDFS+"/skripsi/gkmc0_tmp/")
       S_temp.unpersist()
 
       // Membuat penamaan sebuah cluster
@@ -267,42 +267,42 @@ class GreedyKMemberClustering extends Serializable {
 
       // Menyimpan cluster sementara pada HDFS
       this.delete_folder_hdfs("/skripsi/gkmc1_tmp/",hdfs)
-      c.coalesce(1).write.option("header", "true").csv("hdfs://localhost:50071/skripsi/gkmc1_tmp/")
+      c.coalesce(1).write.option("header", "true").csv(path_HDFS+"/skripsi/gkmc1_tmp/")
 
       // Mencari kelompok data pada cluster terdekat (c)
       while ( cluster_size < k ) {
 
         // Membaca file HDFS
         this.delete_folder_hdfs("/skripsi/gkmc1/",hdfs)
-        hdfs.rename(new Path("hdfs://localhost:50071/skripsi/gkmc1_tmp"), new Path("hdfs://localhost:50071/skripsi/gkmc1"))
-        c = spark.read.option("header", "true").schema(c.schema).csv("hdfs://localhost:50071/skripsi/gkmc1/")
+        hdfs.rename(new Path(path_HDFS+"/skripsi/gkmc1_tmp"), new Path(path_HDFS+"/skripsi/gkmc1"))
+        c = spark.read.option("header", "true").schema(c.schema).csv(path_HDFS+"/skripsi/gkmc1/")
 
         // Mencari record terbaik sebagai anggota cluster (c)
         this.delete_folder_hdfs("/skripsi/gkmc0/",hdfs)
-        hdfs.rename(new Path("hdfs://localhost:50071/skripsi/gkmc0_tmp"), new Path("hdfs://localhost:50071/skripsi/gkmc0"))
-        S_temp = spark.read.option("header", "true").schema(schema).csv("hdfs://localhost:50071/skripsi/gkmc0/")
+        hdfs.rename(new Path(path_HDFS+"/skripsi/gkmc0_tmp"), new Path(path_HDFS+"/skripsi/gkmc0"))
+        S_temp = spark.read.option("header", "true").schema(schema).csv(path_HDFS+"/skripsi/gkmc0/")
         r = find_best_record(spark,json,S_temp,c,cluster_size,min_max_column)
 
         // Mengelompokan data terhadap c -> find best record
-        c = c.union(r)
+        c = c.union(r).cache()
         cluster_size += 1
 
         // Menyimpan cluster sementara pada HDFS
-        c.coalesce(1).write.option("header", "true").csv("hdfs://localhost:50071/skripsi/gkmc1_tmp/")
+        c.coalesce(1).write.option("header", "true").csv(path_HDFS+"/skripsi/gkmc1_tmp/")
 
         // Membuang record r dari tabel S (2)
         S_size -= 1
-        S_temp = spark.read.option("header", "true").schema(schema).csv("hdfs://localhost:50071/skripsi/gkmc0/")
+        S_temp = spark.read.option("header", "true").schema(schema).csv(path_HDFS+"/skripsi/gkmc0/")
         S_temp = S_temp.except(r)
 
         // Melakukan overwrite S_temp pada HDFS (2)
-        S_temp.coalesce(1).write.option("header", "true").csv("hdfs://localhost:50071/skripsi/gkmc0_tmp/")
+        S_temp.coalesce(1).write.option("header", "true").csv(path_HDFS+"/skripsi/gkmc0_tmp/")
         S_temp.unpersist()
       }
 
       this.delete_folder_hdfs("/skripsi/gkmc1/",hdfs)
-      hdfs.rename(new Path("hdfs://localhost:50071/skripsi/gkmc1_tmp"), new Path("hdfs://localhost:50071/skripsi/gkmc1"))
-      c = spark.read.format("csv").option("header", "true").schema(c.schema).load("hdfs://localhost:50071/skripsi/gkmc1/")
+      hdfs.rename(new Path(path_HDFS+"/skripsi/gkmc1_tmp"), new Path(path_HDFS+"/skripsi/gkmc1"))
+      c = spark.read.format("csv").option("header", "true").schema(c.schema).load(path_HDFS+"/skripsi/gkmc1/")
       val min_max = min_max_cluster(c)
       c = c.crossJoin(min_max)
       c = c.withColumn("Cluster",lit(cluster_name))
@@ -312,24 +312,24 @@ class GreedyKMemberClustering extends Serializable {
         clusters = c
         clusters_schema = clusters.schema
         this.delete_folder_hdfs("/skripsi/gkmc2_tmp/",hdfs)
-        clusters.coalesce(1).write.option("header", "true").csv("hdfs://localhost:50071/skripsi/gkmc2_tmp/")
+        clusters.coalesce(1).write.option("header", "true").csv(path_HDFS+"/skripsi/gkmc2_tmp/")
         if(S_size <= k){
           this.delete_folder_hdfs("/skripsi/gkmc0/",hdfs)
-          hdfs.rename(new Path("hdfs://localhost:50071/skripsi/gkmc0_tmp"), new Path("hdfs://localhost:50071/skripsi/gkmc0"))
+          hdfs.rename(new Path("hdfs://localhost:50071/skripsi/gkmc0_tmp"), new Path(path_HDFS+"/skripsi/gkmc0"))
           this.delete_folder_hdfs("/skripsi/gkmc2/",hdfs)
-          hdfs.rename(new Path("hdfs://localhost:50071/skripsi/gkmc2_tmp"), new Path("hdfs://localhost:50071/skripsi/gkmc2"))
+          hdfs.rename(new Path("hdfs://localhost:50071/skripsi/gkmc2_tmp"), new Path(path_HDFS+"/skripsi/gkmc2"))
         }
         clusters.unpersist()
       }
       else {
         this.delete_folder_hdfs("/skripsi/gkmc2/",hdfs)
-        hdfs.rename(new Path("hdfs://localhost:50071/skripsi/gkmc2_tmp"), new Path("hdfs://localhost:50071/skripsi/gkmc2"))
-        clusters = spark.read.format("csv").option("header", "true").schema(clusters.schema).load("hdfs://localhost:50071/skripsi/gkmc2/")
+        hdfs.rename(new Path(path_HDFS+"/skripsi/gkmc2_tmp"), new Path(path_HDFS+"/skripsi/gkmc2"))
+        clusters = spark.read.format("csv").option("header", "true").schema(clusters.schema).load(path_HDFS+"/skripsi/gkmc2/")
         clusters = clusters.union(c)
-        clusters.coalesce(1).write.option("header", "true").csv("hdfs://localhost:50071/skripsi/gkmc2_tmp/")
+        clusters.coalesce(1).write.option("header", "true").csv(path_HDFS+"/skripsi/gkmc2_tmp/")
         if(S_size <= k){
           this.delete_folder_hdfs("/skripsi/gkmc2/",hdfs)
-          hdfs.rename(new Path("hdfs://localhost:50071/skripsi/gkmc2_tmp"), new Path("hdfs://localhost:50071/skripsi/gkmc2"))
+          hdfs.rename(new Path(path_HDFS+"/skripsi/gkmc2_tmp"), new Path(path_HDFS+"/skripsi/gkmc2"))
         }
         clusters.unpersist()
       }
@@ -344,25 +344,25 @@ class GreedyKMemberClustering extends Serializable {
     while (S_size > 0){
       // Mengambil record yang tersisa secara acak
       this.delete_folder_hdfs("/skripsi/gkmc0/",hdfs)
-      hdfs.rename(new Path("hdfs://localhost:50071/skripsi/gkmc0_tmp"), new Path("hdfs://localhost:50071/skripsi/gkmc0"))
-      S_temp = spark.read.format("csv").option("header", "true").schema(S_temp.schema).load("hdfs://localhost:50071/skripsi/gkmc0/")
+      hdfs.rename(new Path(path_HDFS+"/skripsi/gkmc0_tmp"), new Path(path_HDFS+"/skripsi/gkmc0"))
+      S_temp = spark.read.format("csv").option("header", "true").schema(S_temp.schema).load(path_HDFS+"/skripsi/gkmc0/")
       r = S_temp.orderBy(rand()).limit(1)
 
       // Membuang record r dari tabel S (3)
       S_size -= 1
       S_temp = S_temp.except(r)
-      S_temp.coalesce(1).write.option("header", "true").csv("hdfs://localhost:50071/skripsi/gkmc0_tmp/")
+      S_temp.coalesce(1).write.option("header", "true").csv(path_HDFS+"/skripsi/gkmc0_tmp/")
 
       // Membaca clusters dari file HDFS (1)
       clusters = null
       if(initialize){
-        clusters = spark.read.format("csv").option("header", "true").schema(clusters_schema).load("hdfs://localhost:50071/skripsi/gkmc2/")
+        clusters = spark.read.format("csv").option("header", "true").schema(clusters_schema).load(path_HDFS+"/skripsi/gkmc2/")
         initialize = false
       }
       else{
         this.delete_folder_hdfs("/skripsi/gkmc2/",hdfs)
-        hdfs.rename(new Path("hdfs://localhost:50071/skripsi/gkmc2_tmp"), new Path("hdfs://localhost:50071/skripsi/gkmc2"))
-        clusters = spark.read.format("csv").option("header", "true").schema(clusters_schema).load("hdfs://localhost:50071/skripsi/gkmc2/")
+        hdfs.rename(new Path(path_HDFS+"/skripsi/gkmc2_tmp"), new Path(path_HDFS+"/skripsi/gkmc2"))
+        clusters = spark.read.format("csv").option("header", "true").schema(clusters_schema).load(path_HDFS+"/skripsi/gkmc2/")
       }
 
       // Mencari cluster terbaik (c) untuk record r
@@ -384,10 +384,10 @@ class GreedyKMemberClustering extends Serializable {
 
       // Menulis ulang cluster yang baru pada HDFS
       clusters = clusters.union(updated_cluster_temp)
-      clusters.coalesce(1).write.option("header", "true").csv("hdfs://localhost:50071/skripsi/gkmc2_tmp/")
+      clusters.coalesce(1).write.option("header", "true").csv(path_HDFS+"/skripsi/gkmc2_tmp/")
       if(S_size == 0){
         this.delete_folder_hdfs("/skripsi/gkmc2/",hdfs)
-        hdfs.rename(new Path("hdfs://localhost:50071/skripsi/gkmc2_tmp"), new Path("hdfs://localhost:50071/skripsi/gkmc2"))
+        hdfs.rename(new Path(path_HDFS+"/skripsi/gkmc2_tmp"), new Path(path_HDFS+"/skripsi/gkmc2"))
       }
 
     }

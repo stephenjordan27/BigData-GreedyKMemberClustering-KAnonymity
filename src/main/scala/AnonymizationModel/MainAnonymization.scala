@@ -13,28 +13,14 @@ object MainAnonymization  {
 
   def main(args:Array[String]): Unit = {
 
-
     val spark = SparkSession.builder
       .master("local[2]")
-//      .config("spark.shuffle.memoryFraction","0.1")
-//      .config("spark.storage.memoryFraction","0.1")
-//      .config("spark.driver.memoryOverhead","2g")
-//      .config("spark.driver.memory", "4g")
-//      .config("spark.memory.offHeap.enabled",true)
-//      .config("spark.memory.offHeap.size","3g")
-//      .config("spark.maxRemoteBlockSizeFetchToMem","1g")
-//      .config("spark.locality.wait","60000")
-//      .config("spark.driver.memory","4g")
       .appName("Anonymization with Big Data")
       .getOrCreate()
 
-//    spark.conf.set("spark.executor.instances", "4")
-//    spark.conf.set("spark.executor.cores", "5");
-//
-//    implicit val NO_OF_EXECUTOR_INSTANCES = spark.conf.get("spark.executor.instances").toInt
-//    implicit val NO_OF_EXECUTOR_CORES = spark.conf.get("spark.executor.cores").toInt
-//
-//    val idealPartionionNumber = NO_OF_EXECUTOR_INSTANCES * NO_OF_EXECUTOR_CORES
+    val path_HDFS_Local = "hdfs://localhost:50071"
+    val path_HDFS_Cluster = ""
+    val path_HDFS = path_HDFS_Local
 
     // Parameter Greedy K-Member Clustering
     val path_JSON = args(0)
@@ -64,7 +50,7 @@ object MainAnonymization  {
     // 1. Melakukan pengelompokan data dengan algoritma Greedy k-member clustering
     val GKMC = new GreedyKMemberClustering() // 4 menit
     val listBinaryTree = create_list_binary_tree_attribute(S,json)
-    val gkmcDF = GKMC.greedy_k_member_clustering(spark,json,S,k,numSampleDatas,listBinaryTree,hdfs).cache()
+    val gkmcDF = GKMC.greedy_k_member_clustering(spark,json,S,k,numSampleDatas,listBinaryTree,hdfs,path_HDFS).cache()
 
     // 2. Menyimpan hasil pengelompokan data ke dalam CSV
 
