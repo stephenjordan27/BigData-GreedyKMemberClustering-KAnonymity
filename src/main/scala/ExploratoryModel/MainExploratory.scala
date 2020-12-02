@@ -23,8 +23,8 @@ object MainExploratory {
     import org.apache.spark.sql.functions._
     val outputPathExploratoryAnalysis = json.select("output_path").first().getString(0)
     val columnsModify = columnSelectionWithID.columns.map(col).map(colName => {
-      val attrDF = columnSelectionWithID.select(colName).distinct()
-      attrDF.coalesce(1)
+    val attrDF = columnSelectionWithID.select(colName).distinct()
+    attrDF.coalesce(1)
             .write
             .option("header","true")
             .option("sep",",")
