@@ -1,6 +1,5 @@
 package AnonymizationModel
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
@@ -14,13 +13,17 @@ object MainAnonymization  {
   def main(args:Array[String]): Unit = {
 
     val spark = SparkSession.builder
-      .master("local[2]")
-      .appName("Anonymization with Big Data")
-      .getOrCreate()
+                .master("yarn")
+                .appName("Anonymization with Big Data")
+                .getOrCreate()
 
-    val path_HDFS_Local = "hdfs://localhost:50071"
-    val path_HDFS_Cluster = ""
-    val path_HDFS = path_HDFS_Local
+    val path_HDFS_CLUSTER= "hdfs://master:9070/skripsi-jordan/temp"
+    val path_HDFS_LOCAL= "hdfs://localhost:50071/skripsi"
+    val path_HDFS = path_HDFS_CLUSTER
+
+    val path_delete_HDFS_CLUSTER= "/skripsi-jordan/temp"
+    val path_delete_HDFS_LOCAL= "/skripsi"
+    val path_delete_HDFS = path_delete_HDFS_CLUSTER
 
     // Parameter Greedy K-Member Clustering
     val path_JSON = args(0)
@@ -42,15 +45,13 @@ object MainAnonymization  {
       .mode("overwrite")
       .csv(path_data_output+"normal-table")
 
-    // HDFS Configuration
-    val conf = new Configuration()
-    conf.set("fs.default.name", "hdfs://localhost:50071")
-    val hdfs = org.apache.hadoop.fs.FileSystem.get(conf)
+    val hadoopConf = new org.apache.hadoop.conf.Configuration()
+    val hdfs = org.apache.hadoop.fs.FileSystem.get(new java.net.URI("hdfs://master:9070/"), hadoopConf)
 
     // 1. Melakukan pengelompokan data dengan algoritma Greedy k-member clustering
     val GKMC = new GreedyKMemberClustering() // 4 menit
     val listBinaryTree = create_list_binary_tree_attribute(S,json)
-    val gkmcDF = GKMC.greedy_k_member_clustering(spark,json,S,k,numSampleDatas,listBinaryTree,hdfs,path_HDFS).cache()
+    val gkmcDF = GKMC.greedy_k_member_clustering(spark,json,S,k,numSampleDatas,listBinaryTree,hdfs,path_HDFS,path_delete_HDFS).cache()
 
     // 2. Menyimpan hasil pengelompokan data ke dalam CSV
 
@@ -83,11 +84,11 @@ object MainAnonymization  {
     var result = ListBuffer[Seq[String]]()
 
     try{
-      val tree = json.select("domain_generalization_hierarchy."+ category+".tree").collect()(0).getString(0)
+      val treeName = json.select("domain_generalization_hierarchy."+ category+".tree").collect()(0).getString(0)
       val dgh_json = json.select("domain_generalization_hierarchy." + category+".generalization")
       val dgh = dgh_json.collect()
       val dghArr = dgh.map(row => row.getSeq[Row](0))
-      result += Seq[String](tree)
+      result += Seq[String](treeName)
       dghArr.foreach(dgh_variables => {
         dgh_variables.map(row => {
           result += row.toSeq.asInstanceOf[Seq[String]]
@@ -155,6 +156,7 @@ object MainAnonymization  {
     //////////////////////////////////////////////baris ini diganti//////////////////////////////////////////////////
     return tree
   }
+
 
   def generate_dataframe_from_csv(spark:SparkSession, json:DataFrame, dataInput: DataFrame):DataFrame={
     val quasiIdentifier:ListBuffer[Seq[String]] = read_element_from_json(json,"quasi_identifier")
