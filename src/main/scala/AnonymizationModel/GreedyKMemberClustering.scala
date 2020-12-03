@@ -214,7 +214,7 @@ class GreedyKMemberClustering extends Serializable {
       hdfs.delete(path, true)
     }
   }
-  
+
   def greedy_k_member_clustering(spark: SparkSession, json: DataFrame, S: DataFrame, k: Int, numSampleDatas:Int, listBinaryTree:ListBuffer[BinaryTree],hdfs:FileSystem,path_HDFS:String,path_delete_HDFS:String): DataFrame = {
 
     var S_size = numSampleDatas
@@ -227,7 +227,6 @@ class GreedyKMemberClustering extends Serializable {
     // Melakukan inisialisasi keseluruhan
     this.delete_folder_hdfs(path_delete_HDFS+"/gkmc0_tmp/",hdfs)
     S.write.option("header", "true").csv(path_HDFS+"/gkmc0_tmp/")
-
     var S_temp:DataFrame = null
     var clusters: DataFrame = null
     var clusters_schema:StructType = null
@@ -248,11 +247,11 @@ class GreedyKMemberClustering extends Serializable {
       r = S_temp.orderBy(rand()).limit(1)
 
       // Mencari record tabel S terjauh dengan record r
-      r = furthest_record_from_r_optimize(json,S_temp,r,listBinaryTree)
+      r = furthest_record_from_r_optimize(json,S_temp,r,listBinaryTree).cache()
 
       // Membuang record r dari tabel S (1)
       S_size -= 1
-      S_temp = S_temp.except(r)
+      S_temp = S_temp.except(r).cache()
 
       // Melakukan overwrite S_temp pada HDFS (1)
       S_temp.coalesce(1).write.option("header", "true").csv(path_HDFS+"/gkmc0_tmp/")
@@ -306,14 +305,13 @@ class GreedyKMemberClustering extends Serializable {
       this.delete_folder_hdfs(path_delete_HDFS+"/gkmc1/",hdfs)
       hdfs.rename(new Path(path_HDFS+"/gkmc1_tmp"), new Path(path_HDFS+"/gkmc1"))
       c = spark.read.format("csv").option("header", "true").schema(c.schema).load(path_HDFS+"/gkmc1/")
-
       val min_max = min_max_cluster(c)
       c = c.crossJoin(min_max)
       c = c.withColumn("Cluster",lit(cluster_name))
 
       // Mengelompokan data
       if(clusters == null) {
-        clusters = c
+        clusters = c.cache()
         clusters_schema = clusters.schema
         this.delete_folder_hdfs(path_delete_HDFS+"/gkmc2_tmp/",hdfs)
         clusters.coalesce(1).write.option("header", "true").csv(path_HDFS+"/gkmc2_tmp/")
@@ -378,13 +376,13 @@ class GreedyKMemberClustering extends Serializable {
 
       // Menghilangkan sebuah cluster dalam clusters
       var cluster = clusters.filter(clusters("Cluster").contains(c.first().getString(0))) // mengandung nama cluster c
-      clusters = clusters.except(cluster)
+      clusters = clusters.except(cluster).cache()
 
       // Membuang kolom max_attr dan min_attr pada cluster
       cluster = cluster.select(cluster.columns.filter(x => !x.contains("_") && !x.contains("Cluster")).map(cluster(_)) : _*)
 
       // Mencari min max value dari cluster baru
-      cluster = cluster.union(r)
+      cluster = cluster.union(r).cache()
       val minmax_cluster = min_max_cluster(cluster)
       var updated_cluster_temp = cluster.crossJoin(minmax_cluster) // join dengan min max
       updated_cluster_temp = updated_cluster_temp.crossJoin(c) // join dengan nama cluster

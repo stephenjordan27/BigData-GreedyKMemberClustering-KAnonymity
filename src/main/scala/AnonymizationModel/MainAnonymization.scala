@@ -13,17 +13,17 @@ object MainAnonymization  {
   def main(args:Array[String]): Unit = {
 
     val spark = SparkSession.builder
-                .master("yarn")
+                .master("local[2]")
                 .appName("Anonymization with Big Data")
                 .getOrCreate()
 
     val path_HDFS_CLUSTER= "hdfs://master:9070/skripsi-jordan/temp"
     val path_HDFS_LOCAL= "hdfs://localhost:50071/skripsi"
-    val path_HDFS = path_HDFS_CLUSTER
+    val path_HDFS = path_HDFS_LOCAL
 
     val path_delete_HDFS_CLUSTER= "/skripsi-jordan/temp"
     val path_delete_HDFS_LOCAL= "/skripsi"
-    val path_delete_HDFS = path_delete_HDFS_CLUSTER
+    val path_delete_HDFS = path_delete_HDFS_LOCAL
 
     // Parameter Greedy K-Member Clustering
     val path_JSON = args(0)
@@ -46,7 +46,7 @@ object MainAnonymization  {
       .csv(path_data_output+"normal-table")
 
     val hadoopConf = new org.apache.hadoop.conf.Configuration()
-    val hdfs = org.apache.hadoop.fs.FileSystem.get(new java.net.URI("hdfs://master:9070/"), hadoopConf)
+    val hdfs = org.apache.hadoop.fs.FileSystem.get(new java.net.URI("hdfs://localhost:50071/"), hadoopConf)
 
     // 1. Melakukan pengelompokan data dengan algoritma Greedy k-member clustering
     val GKMC = new GreedyKMemberClustering() // 4 menit
