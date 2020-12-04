@@ -247,11 +247,11 @@ class GreedyKMemberClustering extends Serializable {
       r = S_temp.orderBy(rand()).limit(1)
 
       // Mencari record tabel S terjauh dengan record r
-      r = furthest_record_from_r_optimize(json,S_temp,r,listBinaryTree).cache()
+      r = furthest_record_from_r_optimize(json,S_temp,r,listBinaryTree).cache() // cache gk boleh dihilangin
 
       // Membuang record r dari tabel S (1)
       S_size -= 1
-      S_temp = S_temp.except(r).cache()
+      S_temp = S_temp.except(r)
 
       // Melakukan overwrite S_temp pada HDFS (1)
       S_temp.coalesce(1).write.option("header", "true").csv(path_HDFS+"/gkmc0_tmp/")
@@ -285,7 +285,7 @@ class GreedyKMemberClustering extends Serializable {
         r = find_best_record(spark,json,S_temp,c,cluster_size,min_max_column)
 
         // Mengelompokan data terhadap c -> find best record
-        c = c.union(r).cache()
+        c = c.union(r)
         cluster_size += 1
 
         // Menyimpan cluster sementara pada HDFS
@@ -294,12 +294,13 @@ class GreedyKMemberClustering extends Serializable {
         // Membuang record r dari tabel S (2)
         S_size -= 1
         S_temp = spark.read.option("header", "true").schema(schema).csv(path_HDFS+"/gkmc0/")
-        S_temp = S_temp.except(r).cache()
+        S_temp = S_temp.except(r)
 
         // Melakukan overwrite S_temp pada HDFS (2)
         this.delete_folder_hdfs(path_delete_HDFS+"/gkmc0_tmp/",hdfs)
         S_temp.coalesce(1).write.option("header", "true").csv(path_HDFS+"/gkmc0_tmp/")
-        S_temp.unpersist()
+
+
       }
 
       this.delete_folder_hdfs(path_delete_HDFS+"/gkmc1/",hdfs)
@@ -311,7 +312,7 @@ class GreedyKMemberClustering extends Serializable {
 
       // Mengelompokan data
       if(clusters == null) {
-        clusters = c.cache()
+        clusters = c
         clusters_schema = clusters.schema
         this.delete_folder_hdfs(path_delete_HDFS+"/gkmc2_tmp/",hdfs)
         clusters.coalesce(1).write.option("header", "true").csv(path_HDFS+"/gkmc2_tmp/")
@@ -321,20 +322,20 @@ class GreedyKMemberClustering extends Serializable {
           this.delete_folder_hdfs(path_delete_HDFS+"/gkmc2/",hdfs)
           hdfs.rename(new Path(path_HDFS+"/gkmc2_tmp"), new Path(path_HDFS+"/gkmc2"))
         }
-        clusters.unpersist()
       }
       else {
         this.delete_folder_hdfs(path_delete_HDFS+"/gkmc2/",hdfs)
         hdfs.rename(new Path(path_HDFS+"/gkmc2_tmp"), new Path(path_HDFS+"/gkmc2"))
         clusters = spark.read.format("csv").option("header", "true").schema(clusters.schema).load(path_HDFS+"/gkmc2/")
-        clusters = clusters.union(c).cache()
+        clusters = clusters.union(c)
         clusters.coalesce(1).write.option("header", "true").csv(path_HDFS+"/gkmc2_tmp/")
         if(S_size <= k){
           this.delete_folder_hdfs(path_delete_HDFS+"/gkmc2/",hdfs)
           hdfs.rename(new Path(path_HDFS+"/gkmc2_tmp"), new Path(path_HDFS+"/gkmc2"))
         }
-        clusters.unpersist()
       }
+
+      spark.sqlContext.clearCache()
 
     }
 
@@ -351,7 +352,7 @@ class GreedyKMemberClustering extends Serializable {
 
       // Membuang record r dari tabel S (3)
       S_size -= 1
-      S_temp = S_temp.except(r).cache()
+      S_temp = S_temp.except(r)
       S_temp.coalesce(1).write.option("header", "true").csv(path_HDFS+"/gkmc0_tmp/")
       if(S_size == 0){
         this.delete_folder_hdfs(path_delete_HDFS+"/gkmc0/",hdfs)
@@ -376,24 +377,26 @@ class GreedyKMemberClustering extends Serializable {
 
       // Menghilangkan sebuah cluster dalam clusters
       var cluster = clusters.filter(clusters("Cluster").contains(c.first().getString(0))) // mengandung nama cluster c
-      clusters = clusters.except(cluster).cache()
+      clusters = clusters.except(cluster)
 
       // Membuang kolom max_attr dan min_attr pada cluster
       cluster = cluster.select(cluster.columns.filter(x => !x.contains("_") && !x.contains("Cluster")).map(cluster(_)) : _*)
 
       // Mencari min max value dari cluster baru
-      cluster = cluster.union(r).cache()
+      cluster = cluster.union(r)
       val minmax_cluster = min_max_cluster(cluster)
       var updated_cluster_temp = cluster.crossJoin(minmax_cluster) // join dengan min max
       updated_cluster_temp = updated_cluster_temp.crossJoin(c) // join dengan nama cluster
 
       // Menulis ulang cluster yang baru pada HDFS
-      clusters = clusters.union(updated_cluster_temp).cache
+      clusters = clusters.union(updated_cluster_temp).cache()
       clusters.coalesce(1).write.option("header", "true").csv(path_HDFS+"/gkmc2_tmp/")
       if(S_size == 0){
         this.delete_folder_hdfs(path_delete_HDFS+"/gkmc2/",hdfs)
         hdfs.rename(new Path(path_HDFS+"/gkmc2_tmp"), new Path(path_HDFS+"/gkmc2"))
       }
+
+      spark.sqlContext.clearCache()
 
     }
 
