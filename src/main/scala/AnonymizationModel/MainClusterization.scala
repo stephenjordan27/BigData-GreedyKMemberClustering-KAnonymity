@@ -18,7 +18,7 @@ object MainClusterization  {
   def main(args:Array[String]): Unit = {
 
     val spark = SparkSession.builder
-                .master("local[2]")
+                .master("yarn")
                 .appName("GKMC")
                 .getOrCreate()
 
@@ -43,10 +43,12 @@ object MainClusterization  {
     val columnSelectionWithID = generate_dataframe_from_csv(spark,json,datasetInput)
 
     // Membatasi record yang dipakai untuk eksperimen
-    val S = columnSelectionWithID.where("id <= "+num_sample_datas).cache()
+    val S = columnSelectionWithID.where("id <= "+num_sample_datas).repartition(45).cache()
     S.coalesce(1).write.option("header","true").option("sep",",").
                                 mode("overwrite").csv(output_path+"normal-table")
 
+
+    S.rdd.mapPartitionsWithIndex((x,y) => {println(s"partitions $x has ${y.length} records");y.map(a => a+"")}).collect.foreach(println)
     // Inisialisasi path HDFS untuk membaca csv dan delete folder
     val path_HDFS = hdfs_name + temp_files
     val path_delete_function_HDFS = temp_files
@@ -61,14 +63,15 @@ object MainClusterization  {
     val kanonymity_input =  spark.read.format("csv").option("header", "true").
                             schema(gkmcDF.schema).load(path_HDFS+"/gkmc2/")
     val gkmc_output = kanonymity_input.select(kanonymity_input.columns.
-                      filter(colName => !colName.contains("_")).map(kanonymity_input(_)): _*)
+                      filter(colName => !colName.startsWith("max_") &&
+                      !colName.contains("min_")).map(kanonymity_input(_)) : _*)
 
     // Menyimpan input k-anonymity di HDFS dan menyimpan pengelompokan data di local path
-    this.delete_folder_hdfs("hdfs://localhost:50071/skripsi/gkmc_output",hdfs)
+    this.delete_folder_hdfs(path_HDFS+"/gkmc_output",hdfs)
 
     kanonymity_input.coalesce(1)
                     .write.format("parquet")
-                    .save("hdfs://localhost:50071/skripsi/"+"gkmc_output")
+                    .save(path_HDFS+"/gkmc_output")
 
     gkmc_output.coalesce(1).
                 write.

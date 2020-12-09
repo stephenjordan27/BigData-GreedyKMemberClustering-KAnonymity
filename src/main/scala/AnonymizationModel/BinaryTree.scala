@@ -41,10 +41,7 @@ class BinaryTree(key: String) extends Serializable {
   }
 
   def getHeight(root: Node): Int ={
-    // height will be 0 if the node is leaf or null
-    if(root == null || isLeaf()) return 0;
-    //height of a node will be 1+ greater among height of right subtree and height of left subtree
-    return(getMax(getHeight(root.left), getHeight(root.right)) + 1);
+    return this.root.level
   }
 
 

@@ -38,23 +38,21 @@ class GreedyKMemberClustering extends Serializable {
 
   def calculateCategoricalDistance(binaryTree: BinaryTree):UserDefinedFunction = udf( (category1: String, category2: String) => {
     if(binaryTree!=null){
-      val node1 = binaryTree.search(category1)
-      val node2 = binaryTree.search(category2)
-
-      if(node1 != null && node2 != null && node1.name != node2.name){
-        val LCA = new LowestCommonAncestor()
-        val LCA_root_name = LCA.findLCA(binaryTree.root, node1.name, node2.name)
-        val H_subtree = binaryTree.search(LCA_root_name).level
-        val H_TD = binaryTree.getHeight(binaryTree.root).toDouble
-        BigDecimal(H_subtree*1.0 / H_TD).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
-      }
-      else{
-        0.0
-      }
-
+        val node1 = binaryTree.search(category1)
+        val node2 = binaryTree.search(category2)
+        if(node1 != null && node2 != null && node1.name != node2.name){
+          val LCA = new LowestCommonAncestor()
+          val LCA_root_name = LCA.findLCA(binaryTree.root, node1.name, node2.name)
+          val H_subtree = binaryTree.search(LCA_root_name).level
+          val H_TD = binaryTree.getHeight(binaryTree.root).toDouble
+          BigDecimal(H_subtree*1.0 / H_TD).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
+        }
+        else{
+          1.0
+        }
     }
     else{
-      0.0
+        1.0
     }
 
   })
@@ -75,7 +73,7 @@ class GreedyKMemberClustering extends Serializable {
           BigDecimal(H_subtree*1.0 / H_TD).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
         }
         else{
-          0.0
+          1.0
         }
       }
       else if(numDistinctValues > 2){
@@ -89,7 +87,7 @@ class GreedyKMemberClustering extends Serializable {
 
     }
     else{
-      0.0
+      1.0
     }
 
   })
@@ -243,7 +241,7 @@ class GreedyKMemberClustering extends Serializable {
       // Mengambil 1 record secara acak
       this.delete_folder_hdfs(path_delete_HDFS+"/gkmc0/",hdfs)
       hdfs.rename(new Path(path_HDFS+"/gkmc0_tmp"), new Path(path_HDFS+"/gkmc0"))
-      S_temp = spark.read.option("header", "true").schema(schema).csv(path_HDFS+"/gkmc0/")
+      S_temp = spark.read.option("header", "true").schema(schema).csv(path_HDFS+"/gkmc0/").repartition(45)
       r = S_temp.orderBy(rand()).limit(1)
 
       // Mencari record tabel S terjauh dengan record r
@@ -251,7 +249,7 @@ class GreedyKMemberClustering extends Serializable {
 
       // Membuang record r dari tabel S (1)
       S_size -= 1
-      S_temp = S_temp.except(r)
+      S_temp = S_temp.except(r).repartition(45)
 
       // Melakukan overwrite S_temp pada HDFS (1)
       S_temp.coalesce(1).write.option("header", "true").csv(path_HDFS+"/gkmc0_tmp/")
@@ -276,12 +274,12 @@ class GreedyKMemberClustering extends Serializable {
         // Membaca file HDFS
         this.delete_folder_hdfs(path_delete_HDFS+"/gkmc1/",hdfs)
         hdfs.rename(new Path(path_HDFS+"/gkmc1_tmp"), new Path(path_HDFS+"/gkmc1"))
-        c = spark.read.option("header", "true").schema(c.schema).csv(path_HDFS+"/gkmc1/")
+        c = spark.read.option("header", "true").schema(c.schema).csv(path_HDFS+"/gkmc1/").repartition(45)
 
         // Mencari record terbaik sebagai anggota cluster (c)
         this.delete_folder_hdfs(path_delete_HDFS+"/gkmc0/",hdfs)
         hdfs.rename(new Path(path_HDFS+"/gkmc0_tmp"), new Path(path_HDFS+"/gkmc0"))
-        S_temp = spark.read.option("header", "true").schema(schema).csv(path_HDFS+"/gkmc0/")
+        S_temp = spark.read.option("header", "true").schema(schema).csv(path_HDFS+"/gkmc0/").repartition(45)
         r = find_best_record(spark,json,S_temp,c,cluster_size,min_max_column)
 
         // Mengelompokan data terhadap c -> find best record
@@ -293,7 +291,7 @@ class GreedyKMemberClustering extends Serializable {
 
         // Membuang record r dari tabel S (2)
         S_size -= 1
-        S_temp = spark.read.option("header", "true").schema(schema).csv(path_HDFS+"/gkmc0/")
+        S_temp = spark.read.option("header", "true").schema(schema).csv(path_HDFS+"/gkmc0/").repartition(45)
         S_temp = S_temp.except(r)
 
         // Melakukan overwrite S_temp pada HDFS (2)
@@ -305,9 +303,9 @@ class GreedyKMemberClustering extends Serializable {
 
       this.delete_folder_hdfs(path_delete_HDFS+"/gkmc1/",hdfs)
       hdfs.rename(new Path(path_HDFS+"/gkmc1_tmp"), new Path(path_HDFS+"/gkmc1"))
-      c = spark.read.format("csv").option("header", "true").schema(c.schema).load(path_HDFS+"/gkmc1/")
+      c = spark.read.format("csv").option("header", "true").schema(c.schema).load(path_HDFS+"/gkmc1/").repartition(45)
       val min_max = min_max_cluster(c)
-      c = c.crossJoin(min_max)
+      c = c.crossJoin(min_max).repartition(45)
       c = c.withColumn("Cluster",lit(cluster_name))
 
       // Mengelompokan data
@@ -316,23 +314,21 @@ class GreedyKMemberClustering extends Serializable {
         clusters_schema = clusters.schema
         this.delete_folder_hdfs(path_delete_HDFS+"/gkmc2_tmp/",hdfs)
         clusters.coalesce(1).write.option("header", "true").csv(path_HDFS+"/gkmc2_tmp/")
-        if(S_size <= k){
-          this.delete_folder_hdfs(path_delete_HDFS+"/gkmc0/",hdfs)
-          hdfs.rename(new Path(path_HDFS+"/gkmc0_tmp"), new Path(path_HDFS+"/gkmc0"))
-          this.delete_folder_hdfs(path_delete_HDFS+"/gkmc2/",hdfs)
-          hdfs.rename(new Path(path_HDFS+"/gkmc2_tmp"), new Path(path_HDFS+"/gkmc2"))
-        }
       }
       else {
         this.delete_folder_hdfs(path_delete_HDFS+"/gkmc2/",hdfs)
         hdfs.rename(new Path(path_HDFS+"/gkmc2_tmp"), new Path(path_HDFS+"/gkmc2"))
-        clusters = spark.read.format("csv").option("header", "true").schema(clusters.schema).load(path_HDFS+"/gkmc2/")
+        clusters = spark.read.format("csv").option("header", "true").schema(clusters.schema).load(path_HDFS+"/gkmc2/").repartition(45)
         clusters = clusters.union(c)
         clusters.coalesce(1).write.option("header", "true").csv(path_HDFS+"/gkmc2_tmp/")
-        if(S_size <= k){
-          this.delete_folder_hdfs(path_delete_HDFS+"/gkmc2/",hdfs)
-          hdfs.rename(new Path(path_HDFS+"/gkmc2_tmp"), new Path(path_HDFS+"/gkmc2"))
-        }
+
+      }
+
+      if(S_size == 0){
+        this.delete_folder_hdfs(path_delete_HDFS+"/gkmc0/",hdfs)
+        hdfs.rename(new Path(path_HDFS+"/gkmc0_tmp"), new Path(path_HDFS+"/gkmc0"))
+        this.delete_folder_hdfs(path_delete_HDFS+"/gkmc2/",hdfs)
+        hdfs.rename(new Path(path_HDFS+"/gkmc2_tmp"), new Path(path_HDFS+"/gkmc2"))
       }
 
       spark.sqlContext.clearCache()
@@ -347,7 +343,7 @@ class GreedyKMemberClustering extends Serializable {
       // Mengambil record yang tersisa secara acak
       this.delete_folder_hdfs(path_delete_HDFS+"/gkmc0/",hdfs)
       hdfs.rename(new Path(path_HDFS+"/gkmc0_tmp"), new Path(path_HDFS+"/gkmc0"))
-      S_temp = spark.read.format("csv").option("header", "true").schema(S_temp.schema).load(path_HDFS+"/gkmc0/")
+      S_temp = spark.read.format("csv").option("header", "true").schema(S_temp.schema).load(path_HDFS+"/gkmc0/").repartition(45)
       r = S_temp.orderBy(rand()).limit(1).cache()
 
       // Membuang record r dari tabel S (3)
@@ -362,13 +358,15 @@ class GreedyKMemberClustering extends Serializable {
       // Membaca clusters dari file HDFS (1)
       clusters = null
       if(initialize){
-        clusters = spark.read.format("csv").option("header", "true").schema(clusters_schema).load(path_HDFS+"/gkmc2/")
+        this.delete_folder_hdfs(path_delete_HDFS+"/gkmc2/",hdfs)
+        hdfs.rename(new Path(path_HDFS+"/gkmc2_tmp"), new Path(path_HDFS+"/gkmc2"))
+        clusters = spark.read.format("csv").option("header", "true").schema(clusters_schema).load(path_HDFS+"/gkmc2/").repartition(45)
         initialize = false
       }
       else{
         this.delete_folder_hdfs(path_delete_HDFS+"/gkmc2/",hdfs)
         hdfs.rename(new Path(path_HDFS+"/gkmc2_tmp"), new Path(path_HDFS+"/gkmc2"))
-        clusters = spark.read.format("csv").option("header", "true").schema(clusters_schema).load(path_HDFS+"/gkmc2/")
+        clusters = spark.read.format("csv").option("header", "true").schema(clusters_schema).load(path_HDFS+"/gkmc2/").repartition(45)
       }
 
       // Mencari cluster terbaik (c) untuk record r
@@ -380,7 +378,7 @@ class GreedyKMemberClustering extends Serializable {
       clusters = clusters.except(cluster)
 
       // Membuang kolom max_attr dan min_attr pada cluster
-      cluster = cluster.select(cluster.columns.filter(x => !x.contains("_") && !x.contains("Cluster")).map(cluster(_)) : _*)
+      cluster = cluster.select(cluster.columns.filter(colName => !colName.startsWith("max_") && !colName.contains("min_") && !colName.contains("Cluster")).map(cluster(_)) : _*)
 
       // Mencari min max value dari cluster baru
       cluster = cluster.union(r)
@@ -400,6 +398,7 @@ class GreedyKMemberClustering extends Serializable {
 
     }
 
+    clusters = spark.read.format("csv").option("header", "true").schema(clusters_schema).load(path_HDFS+"/gkmc2/").repartition(45)
     return clusters
 
   }
@@ -417,7 +416,10 @@ class GreedyKMemberClustering extends Serializable {
     val cluster_union_r = S_temp.crossJoin(min_max_column)
     val subs_infoloss = calculate_substraction_information_loss_optimize(json,cluster_union_r,c,cluster_size)
     val subs_infoloss_ordered = subs_infoloss.orderBy(asc("Subs_IL")).limit(1)
-    val best = subs_infoloss_ordered.select(subs_infoloss_ordered.columns.filter(!_.contains("_")).map(subs_infoloss_ordered(_)): _*)
+    val best = subs_infoloss_ordered.select(subs_infoloss_ordered.columns.filter(colName =>
+                !colName.startsWith("max_") && !colName.startsWith("min_") &&
+                !colName.startsWith("Total_") && !colName.startsWith("Subs_")).
+                map(subs_infoloss_ordered(_)): _*)
     return best
   }
 
@@ -430,8 +432,8 @@ class GreedyKMemberClustering extends Serializable {
           result = c.select(max(element._1).as("max_"+element._1),min(element._1).as("min_"+element._1))
         }
         else{
-          result = result.withColumn("max_"+element._1,max(element._1))
-          result = result.withColumn("min_"+element._1,min(element._1))
+          val c_temp = c.select(max(element._1).as("max_"+element._1),min(element._1).as("min_"+element._1))
+          result = result.crossJoin(c_temp)
         }
 
       }
