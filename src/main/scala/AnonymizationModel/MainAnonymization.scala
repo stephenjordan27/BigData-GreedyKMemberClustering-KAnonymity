@@ -15,7 +15,7 @@ object MainAnonymization {
   def main(args:Array[String]): Unit = {
 
     val spark = SparkSession.builder
-      .master("yarn")
+      .master("local[2]")
       .appName("K-Anonymity")
       .getOrCreate()
 

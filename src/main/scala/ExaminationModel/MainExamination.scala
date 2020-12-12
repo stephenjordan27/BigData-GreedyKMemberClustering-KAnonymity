@@ -1,10 +1,13 @@
 package ExaminationModel
 
 
+import AnonymizationModel.{BinaryTree, LowestCommonAncestor}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.ml.classification.NaiveBayesModel
-import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.expressions.{UserDefinedFunction, Window}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{IntegerType, StringType}
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
 
 import scala.collection.mutable.ListBuffer
 
@@ -25,16 +28,21 @@ object MainExamination {
     val num_sample_datas = json.select("num_sample_data").first().getLong(0).toInt
     val path_data_input_normal_table = json.select("input_path_normal").first().getString(0)                           // ganti di sini
     val path_data_input_anonymize_table = json.select("input_path_anonymize").first().getString(0)
+    val path_data_input_cluster_table = json.select("input_path_cluster").first().getString(0)
     val outputPath = json.select("output_path").first().getString(0)
     val model_name = json.select("model_name").first().getString(0)
 
     val normalTable = spark.read.format("csv").option("header", "true").load(path_data_input_normal_table)
     val anonymizeTable = spark.read.format("csv").option("header", "true").load(path_data_input_anonymize_table)
+    val clusterTable = spark.read.format("csv").option("header", "true").load(path_data_input_cluster_table)
 
-    val normalTableWithID = generate_dataframe_from_csv(spark,json,normalTable).
+
+    val normalTableWithID = generate_dataframe_from_csv(spark,json,normalTable, false).
                             where("id <= "+num_sample_datas).cache()
     val anonymizeTableWithID =  anonymizeTable.
                                 where("id <= "+num_sample_datas).cache()
+    val clusterTableWithID =  generate_dataframe_from_csv(spark,json,clusterTable, true).
+                              where("id <= "+num_sample_datas).cache()
 
 
     // K-Means
@@ -153,6 +161,81 @@ object MainExamination {
                   .csv(outputPath+"naive-bayes/accuracy")
 
     }
+    else if(model_name.contains("total_information_loss")){
+      // Parameter Total Information Loss
+      var total_information_loss:Double = 0.0
+
+      // Parameter JSON
+      val path_json = json.select("total_information_loss.path_json").first().getString(0)
+      val json2 = spark.read.option("multiline", "true").json(path_json).cache()
+      val hdfs_name = json2.select("hdfs").first().getString(0)
+      val temp_files = json2.select("temp_files").first().getString(0)
+
+      // Inisialisasi path HDFS untuk membaca csv dan delete folder
+      val path_HDFS = hdfs_name + temp_files
+      val path_delete_function_HDFS = temp_files
+
+      // Membaca input k-anonymity dari HDFS
+      val hadoopConf = new org.apache.hadoop.conf.Configuration()
+      val hdfs = org.apache.hadoop.fs.FileSystem.get(new java.net.URI(hdfs_name), hadoopConf)
+
+      // Mengambil file GKMC
+      val clusters_schema = clusterTableWithID.schema
+
+      // Tulis clusters ke file HDFS
+      var numClusters = clusterTableWithID.select("Cluster").distinct().count().toInt
+      this.delete_folder_hdfs(path_delete_function_HDFS+"/totalIL1_tmp/",hdfs)
+      clusterTableWithID.coalesce(1).write.option("header", "true").
+                          csv(path_HDFS+"/totalIL1_tmp/")
+
+      // Loop
+      while(numClusters > 0){
+
+        // Baca clusters dari file HDFS
+        this.delete_folder_hdfs(path_delete_function_HDFS+"/totalIL1/",hdfs)
+        hdfs.rename(new Path(path_HDFS+"/totalIL1_tmp"),new Path(path_HDFS+"/totalIL1"))
+        var clusters_temp = spark.read.format("csv").option("header", "true").
+                            schema(clusters_schema).load(path_HDFS+"/totalIL1/")
+
+        // Mengambil sebuah cluster
+        val clusterName = "Cluster "+numClusters
+        val clusterDF = clusters_temp.where(clusters_temp("Cluster").contains(clusterName))
+        val cluster_size = clusterDF.count().toInt
+        val clusterDF_temp = clusterDF
+
+        // Menulis cluster pada file HDFS
+        this.delete_folder_hdfs(path_delete_function_HDFS+"/totalIL2_tmp/",hdfs)
+        clusterDF.coalesce(1).write.option("header", "true").csv(path_HDFS+"/totalIL2_tmp/")
+
+        // Melakukan perhitungan Total Information Loss
+        total_information_loss += calculate_total_information_loss_optimize(json,clusterDF,cluster_size)
+
+        // Membuang cluster yang sudah pernah dianonimisasi
+        clusters_temp = clusters_temp.except(clusterDF_temp).cache()
+        clusters_temp.coalesce(1).write.option("header", "true").
+                      csv(path_HDFS+"/totalIL1_tmp/")
+        if(numClusters == 0){
+          this.delete_folder_hdfs(path_delete_function_HDFS+"/totalIL1/",hdfs)
+          hdfs.rename(new Path(path_HDFS+"/totalIL1_tmp"), new Path(path_HDFS+"/totalIL1"))
+        }
+
+        numClusters -= 1
+
+
+      }
+
+      import spark.implicits._
+
+      val result = Seq((total_information_loss)).toDF("total_information_loss")
+
+      result.coalesce(1) //Accuracy
+            .write
+            .option("header","true")
+            .option("sep",",")
+            .mode("overwrite")
+            .csv(outputPath+"total-infoloss")
+
+    }
 
   }
 
@@ -169,9 +252,8 @@ object MainExamination {
     return columnName
   }
 
-  def generate_dataframe_from_csv(spark:SparkSession, json:DataFrame, dataInput: DataFrame):DataFrame={
+  def generate_dataframe_from_csv(spark:SparkSession, json:DataFrame, dataInput: DataFrame, isCluster: Boolean):DataFrame={
     val selectedColumn:ListBuffer[Seq[String]] = read_element_from_json(json,"selected_column")
-
     val selectedColumnAttribute:List[String] = get_attribute_name_json(selectedColumn).toList
     val selectedColumnDatatype:List[String] = get_attribute_datatype_json(selectedColumn).toList
 
@@ -203,6 +285,12 @@ object MainExamination {
     columnID = columnID.withColumnRenamed("id_temp","id")
     var result = columnID.join(columnSelectionWithID, columnID("id") === columnSelectionWithID("id_temp"),"inner")
     result = result.drop("id_temp")
+
+    if(isCluster){
+      val columnCluster = dataInput.select("id","Cluster").withColumnRenamed("id","id_temp")
+      result = result.join(columnCluster,result("id")===columnCluster("id_temp"),"inner")
+      result = result.drop("id_temp")
+    }
 
     return result
   }
@@ -262,5 +350,87 @@ object MainExamination {
     }
 
   }
+
+  def calculate_total_information_loss_optimize(json: DataFrame, cluster: DataFrame, cluster_size:Int): Double = {
+    var cluster_temp = min_max_cluster(cluster)
+
+    cluster.dtypes.filter(!_._1.contains("_")).foreach(element =>
+      if(!element._1.contains("id") && !element._1.contains("Cluster") ){
+        if(element._2.contains("Integer")){
+          cluster_temp = cluster_temp.withColumn("IL_" + element._1, calculateNumericalInformationLossUnion(cluster_size)(col("max_"+element._1),col("min_"+element._1)))
+        }
+        else{
+          cluster_temp = cluster_temp.withColumn("IL_" + element._1, lit(1))
+        }
+      }
+    )
+
+    val infoloss_union = cluster_temp.select(cluster_temp.columns.filter(_.contains("IL_")).map(cluster_temp(_)): _*)
+    val sum_infoloss_union = infoloss_union.columns.toSeq.map(col _)
+
+    cluster_temp = cluster_temp.withColumn("TotalIL",sum_(sum_infoloss_union: _*)*cluster_size)
+
+    cluster_temp = cluster_temp.drop(cluster_temp.columns.filter(_.startsWith("IL")): _*)
+
+    val result = cluster_temp.select("TotalIL").first().getDouble(0)
+
+    return result
+
+  }
+
+  def calculateNumericalInformationLossUnion(cluster_size:Int) = udf ( (max_c:Int, min_c:Int) => {
+    Math.abs(max_c-min_c)*1.0/cluster_size
+  })
+
+  def calculateCategoricalDistance(binaryTree: BinaryTree):UserDefinedFunction = udf( (category1: String, category2: String) => {
+    if(binaryTree!=null){
+      val node1 = binaryTree.search(category1)
+      val node2 = binaryTree.search(category2)
+      if(node1 != null && node2 != null && node1.name != node2.name){
+        val LCA = new LowestCommonAncestor()
+        val LCA_root_name = LCA.findLCA(binaryTree.root, node1.name, node2.name)
+        val H_subtree = binaryTree.search(LCA_root_name).level
+        val H_TD = binaryTree.getHeight(binaryTree.root).toDouble
+        BigDecimal(H_subtree*1.0 / H_TD).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
+      }
+      else{
+        1.0
+      }
+    }
+    else{
+      1.0
+    }
+
+  })
+
+  def sum_(cols: Column*) = cols.foldLeft(lit(0))(_ + _)
+
+  def min_max_cluster(c: DataFrame):DataFrame = {
+    var result:DataFrame = null
+    c.dtypes.filter(element => element._2 == "IntegerType").foreach{element =>
+      if(element._1 != "id" && element._2.contains("Integer")){
+
+        if(result == null){
+          result = c.select(max(element._1).as("max_"+element._1),min(element._1).as("min_"+element._1))
+        }
+        else{
+          val c_temp = c.select(max(element._1).as("max_"+element._1),min(element._1).as("min_"+element._1))
+          result = result.crossJoin(c_temp)
+        }
+
+      }
+
+    }
+    return result
+  }
+
+  def delete_folder_hdfs(pathName: String,hdfs:FileSystem) {
+    val path = new Path(pathName)
+    if (hdfs.exists(path)) {
+      hdfs.delete(path, true)
+    }
+  }
+
+
 
 }
