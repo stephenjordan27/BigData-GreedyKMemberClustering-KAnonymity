@@ -41,7 +41,7 @@ class BinaryTree(key: String) extends Serializable {
   }
 
   def getHeight(root: Node): Int ={
-    return this.root.level
+    return this.root.level-1
   }
 
 

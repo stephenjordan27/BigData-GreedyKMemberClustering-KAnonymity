@@ -19,9 +19,6 @@ object MainExamination {
       .appName("SparkSQL")
       .getOrCreate()
 
-    val sc = spark.sparkContext
-
-
     // Parameter Pengujian
     val path_JSON = args(0)
     val json: DataFrame = spark.read.option("multiline", "true").json(path_JSON).cache() // ganti di sini
@@ -32,33 +29,39 @@ object MainExamination {
     val outputPath = json.select("output_path").first().getString(0)
     val model_name = json.select("model_name").first().getString(0)
 
-    val normalTable = spark.read.format("csv").option("header", "true").load(path_data_input_normal_table)
-    val anonymizeTable = spark.read.format("csv").option("header", "true").load(path_data_input_anonymize_table)
-    val clusterTable = spark.read.format("csv").option("header", "true").load(path_data_input_cluster_table)
-
-
-    val normalTableWithID = generate_dataframe_from_csv(spark,json,normalTable, false).
-                            where("id <= "+num_sample_datas).cache()
-    val anonymizeTableWithID =  anonymizeTable.
-                                where("id <= "+num_sample_datas).cache()
-    val clusterTableWithID =  generate_dataframe_from_csv(spark,json,clusterTable, true).
-                              where("id <= "+num_sample_datas).cache()
-
-
     // K-Means
     if(model_name.contains("k_means")){
+
+      // Membaca file HDFS
+      val normalTable = spark.read.format("csv").option("header", "true").load(path_data_input_normal_table)
+      val anonymizeTable = spark.read.format("csv").option("header", "true").load(path_data_input_anonymize_table)
+
+      // Membuat dataframe dengan skema
+      val normalTableWithID = generate_dataframe_from_csv(spark,json,normalTable, false).
+                              where("id <= "+num_sample_datas).cache()
+      val anonymizeTableWithID =  anonymizeTable.where("id <= "+num_sample_datas).cache()
+
+      // Membuat model k-means
       val k_means_model = new KMeansModel()
 
+      // Edit column normalTableWithID
+      val features:Array[String] = json.select("k_means.features").first().getList(0).toArray().map(_.toString)
+      val normalTableWithID_edited = normalTableWithID.select(features.head, features.tail: _*)
+
       // K-Means: Normal Table
-      val encodedDFNormalTable = k_means_model.create_encoded_features_dataframe(normalTableWithID)
+      val encodedDFNormalTable = k_means_model.create_encoded_features_dataframe(normalTableWithID_edited)
       val modelDFNormalTable = k_means_model.model_training(encodedDFNormalTable,json)
       val modelEvaluationNormalTable = k_means_model.model_evaluation(modelDFNormalTable)
 
       val listPredictorAttributeNormalTable = list_of_predictor_attribute(spark,modelDFNormalTable)
       val predictionDFNormalTable = modelDFNormalTable.select(listPredictorAttributeNormalTable.head, listPredictorAttributeNormalTable.tail: _*)
 
+      // Edit column anonymizeTableWithID
+      val features2:Array[String] = json.select("k_means.features").first().getList(0).toArray().map(x=> "Anonym_"+x.toString)
+      val anonymizeTableWithID_edited = anonymizeTableWithID.select(features2.head, features2.tail: _*)
+
       // K-Means: Anonymize Table
-      val encodedDFAnonymizeTable = k_means_model.create_encoded_features_dataframe(anonymizeTableWithID)
+      val encodedDFAnonymizeTable = k_means_model.create_encoded_features_dataframe(anonymizeTableWithID_edited)
       val modelDFAnonymizeTable = k_means_model.model_training(encodedDFAnonymizeTable,json)
       val modelEvaluationAnonymizeTable = k_means_model.model_evaluation(modelDFAnonymizeTable)
 
@@ -92,21 +95,53 @@ object MainExamination {
     // Naive Bayes
     else if(model_name.contains("naive_bayes")){
 
-      val label = json.select("naive_bayes.label").first().getString(0)
+      // Membaca file HDFS
+      val normalTable = spark.read.format("csv").option("header", "true").load(path_data_input_normal_table)
+      val anonymizeTable = spark.read.format("csv").option("header", "true").load(path_data_input_anonymize_table)
+
+      // Membuat dataframe dengan skema
+      var normalTableWithID = generate_dataframe_from_csv(spark,json,normalTable, false).
+                              where("id <= "+num_sample_datas).cache()
+      var anonymizeTableWithID =  anonymizeTable.where("id <= "+num_sample_datas).cache()
+
+      // Membuat model naive-bayes
+      var label = json.select("naive_bayes.label").first().getString(0)
       val naive_bayes_model = new NaiveBayesModel()
+
+      // Edit column normalTableWithID
+      var features:Array[String]  = Array("id")
+      features = features ++ json.select("naive_bayes.features").first().getList(0).toArray().map(_.toString)
+      features = features :+ label
+      normalTableWithID = normalTableWithID.select(features.head, features.tail: _*)
+
+      // Check label is numeric or not
+      val dt:List[String] = normalTableWithID.select(label).dtypes.map(_._2).toList
+      val cek = dt.head.contains("Integer")
+      if(cek){
+        normalTableWithID = naive_bayes_model.create_label_column(spark,normalTableWithID,json,"")
+        normalTableWithID = normalTableWithID.drop(label)
+        anonymizeTableWithID = naive_bayes_model.create_label_column(spark,anonymizeTableWithID,json,"Anonym_")
+        anonymizeTableWithID = anonymizeTableWithID.drop(label)
+        label = label+"_label"
+      }
 
       //Naive Bayes: Normal Table
       val normalTableWithoutLabel = normalTableWithID.drop(label)
       val encodedDFNormalTable = naive_bayes_model.create_encoded_features_dataframe(normalTableWithID,normalTableWithoutLabel,label,false)
-      val modelDFNormalTable = naive_bayes_model.model_training(encodedDFNormalTable,json)
-      val modelEvaluationNormalTable = naive_bayes_model.model_evaluation(modelDFNormalTable,json)
+      val modelDFNormalTable = naive_bayes_model.model_training(encodedDFNormalTable,json,label)
+      val modelEvaluationNormalTable = naive_bayes_model.model_evaluation(modelDFNormalTable,json,label)
 
+      // Edit column anonymizeTableWithID
+      var features2:Array[String]  = Array("id")
+      features2 = features2 ++ json.select("naive_bayes.features").first().getList(0).toArray().map(x=> "Anonym_"+x.toString)
+      features2 = features2 :+ "Anonym_"+label
+      anonymizeTableWithID = anonymizeTableWithID.select(features2.head, features2.tail: _*)
 
       //Naive Bayes: Anonymize Table
       val anonymizeTableWithoutLabel = anonymizeTableWithID.drop("Anonym_"+label)
       val encodedDFAnonymizeTable = naive_bayes_model.create_encoded_features_dataframe(anonymizeTableWithID,anonymizeTableWithoutLabel,label,true)
-      val modelDFAnonymizeTable = naive_bayes_model.model_training_anonym(encodedDFAnonymizeTable,json)
-      val modelEvaluationAnonymizeTable = naive_bayes_model.model_evaluation_anonym(modelDFAnonymizeTable,json)
+      val modelDFAnonymizeTable = naive_bayes_model.model_training_anonym(encodedDFAnonymizeTable,json,label)
+      val modelEvaluationAnonymizeTable = naive_bayes_model.model_evaluation_anonym(modelDFAnonymizeTable,json,label)
 
 
       // Naive Bayes: Model Evaluation
@@ -114,8 +149,8 @@ object MainExamination {
 
       // CSV
       val outputPath = json.select("output_path").first().getString(0)
-      val pathModelNormal:String = json.select("naive_bayes.path_model_normal").first().getString(0)
-      val pathModelAnonym:String = json.select("naive_bayes.path_model_anonym").first().getString(0)
+      val pathModelNormal:String = json.select("naive_bayes.model_path_normal").first().getString(0)
+      val pathModelAnonym:String = json.select("naive_bayes.model_path_anonym").first().getString(0)
       val loadModelNormalTable = NaiveBayesModel.load(pathModelNormal)
       val loadModelAnonymTable = NaiveBayesModel.load(pathModelAnonym)
 
@@ -125,8 +160,8 @@ object MainExamination {
       val encodedNormalPredictionTable = naive_bayes_model.create_encoded_features_dataframe(normalTableWithID,normalPredictionTable,label,false)
       val encodedAnonymPredictionTable = naive_bayes_model.create_encoded_features_dataframe(anonymizeTableWithID,anonymPredictionTable,label,true)
 
-      val predictionDFNormalTable = loadModelNormalTable.transform(encodedNormalPredictionTable)
-      val predictionDFAnonymizeTable = loadModelAnonymTable.transform(encodedAnonymPredictionTable)
+      val predictionDFNormalTable = loadModelNormalTable.transform(encodedNormalPredictionTable).drop(label)
+      val predictionDFAnonymizeTable = loadModelAnonymTable.transform(encodedAnonymPredictionTable).drop("Anonym_"+label)
 
       val predictionNormalCSV =   predictionDFNormalTable.select(predictionDFNormalTable.columns.filter(colName =>
                                   !colName.contains("_Index") && !colName.contains("_vec") &&
@@ -141,13 +176,13 @@ object MainExamination {
                                     map(predictionDFAnonymizeTable(_)) : _*)
 
 
-      predictionNormalCSV.sort("id").coalesce(1) //Normal Table
+      predictionNormalCSV.coalesce(1) //Normal Table
                   .write
                   .option("header","true")
                   .option("sep",",")
                   .mode("overwrite")
                   .csv(outputPath+"naive-bayes/normal-table")
-      predictionAnonymizeCSV.sort("id").coalesce(1) //Anonymize Table
+      predictionAnonymizeCSV.coalesce(1) //Anonymize Table
                   .write
                   .option("header","true")
                   .option("sep",",")
@@ -162,6 +197,11 @@ object MainExamination {
 
     }
     else if(model_name.contains("total_information_loss")){
+      // Membaca file HDFS dan membuat dataframe dengan skema
+      val clusterTable = spark.read.format("csv").option("header", "true").load(path_data_input_cluster_table)
+      val clusterTableWithID =  generate_dataframe_from_csv(spark,json,clusterTable, true).
+                                where("id <= "+num_sample_datas).cache()
+
       // Parameter Total Information Loss
       var total_information_loss:Double = 0.0
 
@@ -352,34 +392,57 @@ object MainExamination {
   }
 
   def calculate_total_information_loss_optimize(json: DataFrame, cluster: DataFrame, cluster_size:Int): Double = {
-    var cluster_temp = min_max_cluster(cluster)
+    if(!cluster.isEmpty){
 
-    cluster.dtypes.filter(!_._1.contains("_")).foreach(element =>
-      if(!element._1.contains("id") && !element._1.contains("Cluster") ){
-        if(element._2.contains("Integer")){
-          cluster_temp = cluster_temp.withColumn("IL_" + element._1, calculateNumericalInformationLossUnion(cluster_size)(col("max_"+element._1),col("min_"+element._1)))
-        }
-        else{
-          cluster_temp = cluster_temp.withColumn("IL_" + element._1, lit(1))
-        }
+      val check = cluster.drop("id").dtypes.filter(element => element._2.startsWith("Integer"))
+      var cluster_temp:DataFrame = null
+
+      if(check.length == 0){
+        cluster_temp = cluster
       }
-    )
+      else{
+        cluster_temp = min_max_cluster(cluster)
+        cluster_temp = cluster_temp.na.fill(0)
+      }
 
-    val infoloss_union = cluster_temp.select(cluster_temp.columns.filter(_.contains("IL_")).map(cluster_temp(_)): _*)
-    val sum_infoloss_union = infoloss_union.columns.toSeq.map(col _)
+      cluster.dtypes.foreach(element =>
+        if(!element._1.startsWith("id") && !element._1.startsWith("Cluster") ){
+          if(element._2.contains("Integer")){
+            cluster_temp = cluster_temp.withColumn("IL_" + element._1, calculateNumericalInformationLossUnion(cluster_size)(col("max_"+element._1),col("min_"+element._1)))
+          }
+          else{
+            cluster_temp = cluster_temp.withColumn("IL_" + element._1, lit(1)*1.0)
+          }
+        }
+      )
 
-    cluster_temp = cluster_temp.withColumn("TotalIL",sum_(sum_infoloss_union: _*)*cluster_size)
+      val infoloss_union = cluster_temp.select(cluster_temp.columns.filter(_.contains("IL_")).map(cluster_temp(_)): _*)
 
-    cluster_temp = cluster_temp.drop(cluster_temp.columns.filter(_.startsWith("IL")): _*)
+      val sum_infoloss_union = infoloss_union.columns.toSeq.map(col _)
+      val x = cluster_temp.withColumn("TotalIL", sum_(sum_infoloss_union: _*) * cluster_size * 1.0)
 
-    val result = cluster_temp.select("TotalIL").first().getDouble(0)
+      //    cluster_temp = cluster_temp.drop(cluster_temp.columns.filter(_.startsWith("IL")): _*)
 
-    return result
+      var result:Double = 0
+
+
+      result = x.select("TotalIL").first().getDouble(0)
+
+      if(result == 0 || result == null ){
+        print()
+      }
+
+      return result
+    }
+    else{
+      return 0
+    }
+
 
   }
 
-  def calculateNumericalInformationLossUnion(cluster_size:Int) = udf ( (max_c:Int, min_c:Int) => {
-    Math.abs(max_c-min_c)*1.0/cluster_size
+  def calculateNumericalInformationLossUnion(cluster_size:Int) = udf ( (max_c:Int, min_c:Int) =>  {
+      Math.abs(max_c-min_c)*1.0/cluster_size
   })
 
   def calculateCategoricalDistance(binaryTree: BinaryTree):UserDefinedFunction = udf( (category1: String, category2: String) => {

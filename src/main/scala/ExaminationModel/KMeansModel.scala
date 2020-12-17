@@ -65,7 +65,7 @@ class KMeansModel {
     val output = Seq(
       ("Normal table",silhouetteScoreNormalTable),
       ("Anonymize table",silhouetteScoreAnonymizeTable),
-      ("How much different is Silhouette score?",Math.abs(silhouetteScoreNormalTable-silhouetteScoreAnonymizeTable))
+      ("How much different is Silhouette score",Math.abs(silhouetteScoreNormalTable-silhouetteScoreAnonymizeTable))
     ).toDF("Info","Silhouette score")
 
     return output
