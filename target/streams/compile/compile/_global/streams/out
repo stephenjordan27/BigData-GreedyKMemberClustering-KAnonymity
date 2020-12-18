@@ -1,9 +1,8 @@
 [0m[[0m[33mwarn[0m] [0m[0mC:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\src\main\scala\ExaminationModel\MainExamination.scala:6:43: imported `NaiveBayesModel' is permanently hidden by definition of class NaiveBayesModel in package ExaminationModel[0m
 [0m[[0m[33mwarn[0m] [0m[0mimport org.apache.spark.ml.classification.NaiveBayesModel[0m
 [0m[[0m[33mwarn[0m] [0m[0m                                          ^[0m
-[0m[[0m[33mwarn[0m] [0m[0mC:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\src\main\scala\ExaminationModel\MainExamination.scala:408:32: comparing values of types Double and Null using `==' will always yield false[0m
+[0m[[0m[33mwarn[0m] [0m[0mC:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\src\main\scala\ExaminationModel\MainExamination.scala:431:32: comparing values of types Double and Null using `==' will always yield false[0m
 [0m[[0m[33mwarn[0m] [0m[0m      if(result == 0 || result == null ){[0m
 [0m[[0m[33mwarn[0m] [0m[0m                               ^[0m
 [0m[[0m[33mwarn[0m] [0m[0mthere was one deprecation warning; re-run with -deprecation for details[0m
-[0m[[0m[33mwarn[0m] [0m[0mthere was one feature warning; re-run with -feature for details[0m
-[0m[[0m[33mwarn[0m] [0m[0mfour warnings found[0m
+[0m[[0m[33mwarn[0m] [0m[0mthree warnings found[0m

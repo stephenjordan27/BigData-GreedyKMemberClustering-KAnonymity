@@ -55,9 +55,15 @@ class KMeansModel {
   }
 
   def model_evaluation(predictions:DataFrame):Double={
-    val evaluator = new ClusteringEvaluator()
-    val silhouette_score = evaluator.evaluate(predictions)
-    return silhouette_score
+    if(predictions.select("prediction").distinct().count().toInt > 1){
+      val evaluator = new ClusteringEvaluator()
+      val silhouette_score = evaluator.evaluate(predictions)
+      return silhouette_score
+    }
+    else{
+      return 1
+    }
+
   }
 
   def comparing_model_evaluation_csv(spark:SparkSession,silhouetteScoreNormalTable:Double,silhouetteScoreAnonymizeTable:Double):DataFrame={

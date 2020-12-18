@@ -16,7 +16,7 @@ object MainExamination {
   def main(args:Array[String]): Unit = {
     val spark = SparkSession
       .builder.master("local[*]")
-      .appName("SparkSQL")
+      .appName("Examination")
       .getOrCreate()
 
     // Parameter Pengujian
@@ -77,19 +77,19 @@ object MainExamination {
         .option("header","true")
         .option("sep",",")
         .mode("overwrite")
-        .csv(outputPath+"k-means/normal-table")
+        .csv(outputPath+"normal-table")
       predictionDFAnonymizeTable.coalesce(1) //Anonymize Table
         .write
         .option("header","true")
         .option("sep",",")
         .mode("overwrite")
-        .csv(outputPath+"k-means/anonymize-table")
+        .csv(outputPath+"anonymize-table")
       model_evaluation.coalesce(1) //Silhoette Table
         .write
         .option("header","true")
         .option("sep",",")
         .mode("overwrite")
-        .csv(outputPath+"k-means/silhouette-score")
+        .csv(outputPath+"silhouette-score")
 
     }
     // Naive Bayes
@@ -181,19 +181,19 @@ object MainExamination {
                   .option("header","true")
                   .option("sep",",")
                   .mode("overwrite")
-                  .csv(outputPath+"naive-bayes/normal-table")
+                  .csv(outputPath+"normal-table")
       predictionAnonymizeCSV.coalesce(1) //Anonymize Table
                   .write
                   .option("header","true")
                   .option("sep",",")
                   .mode("overwrite")
-                  .csv(outputPath+"naive-bayes/anonymize-table")
+                  .csv(outputPath+"anonymize-table")
       model_evaluation.coalesce(1) //Accuracy
                   .write
                   .option("header","true")
                   .option("sep",",")
                   .mode("overwrite")
-                  .csv(outputPath+"naive-bayes/accuracy")
+                  .csv(outputPath+"accuracy")
 
     }
     else if(model_name.contains("total_information_loss")){
@@ -276,8 +276,64 @@ object MainExamination {
             .csv(outputPath+"total-infoloss")
 
     }
+    else if(model_name.contains("perbedaan_hasil_clustering")){
+      val path_input_normal_clustering = json.select("perbedaan_hasil_clustering.path_input_normal_clustering").first().getString(0)
+      val path_input_anonym_clustering = json.select("perbedaan_hasil_clustering.path_input_anonym_clustering").first().getString(0)
+
+      var normal_clustering = spark.read.format("csv").option("header", "true").load(path_input_normal_clustering)
+      var anonym_clustering = spark.read.format("csv").option("header", "true").load(path_input_anonym_clustering)
+
+      normal_clustering = normal_clustering.withColumn("id", row_number().over(Window.orderBy(monotonically_increasing_id())) )
+      anonym_clustering = anonym_clustering.withColumn("id", row_number().over(Window.orderBy(monotonically_increasing_id())) )
+
+      normal_clustering = normal_clustering.select("id","prediction")
+      anonym_clustering = anonym_clustering.select("id","prediction").
+                          withColumnRenamed("id","id2").
+                          withColumnRenamed("prediction","prediction2")
+
+      var result = normal_clustering.join(anonym_clustering, normal_clustering("id") === anonym_clustering("id2"),"inner")
+      result = result.withColumn("similarity",isValueSimilar(col("prediction"),col("prediction2")))
+      result = result.filter(col("similarity").contains(true)).select( (count("similarity")*1.0/num_sample_datas).as("PercentageSimilarityClustering"))
+
+      result.coalesce(1) //Accuracy
+            .write
+            .option("header","true")
+            .option("sep",",")
+            .mode("overwrite")
+            .csv(outputPath+"percentage-similarity-clustering")
+    }
+    else if(model_name.contains("perbedaan_hasil_klasifikasi")){
+      val path_input_normal_classification = json.select("perbedaan_hasil_klasifikasi.path_input_normal_classification").first().getString(0)
+      val path_input_anonym_classification = json.select("perbedaan_hasil_klasifikasi.path_input_anonym_classification").first().getString(0)
+
+      var normal_classification = spark.read.format("csv").option("header", "true").load(path_input_normal_classification)
+      var anonym_classification = spark.read.format("csv").option("header", "true").load(path_input_anonym_classification)
+
+      normal_classification = normal_classification.withColumn("id", row_number().over(Window.orderBy(monotonically_increasing_id())) )
+      anonym_classification = anonym_classification.withColumn("id", row_number().over(Window.orderBy(monotonically_increasing_id())) )
+
+      normal_classification = normal_classification.select("id","prediction")
+      anonym_classification = anonym_classification.select("id","prediction").
+                              withColumnRenamed("id","id2").
+                              withColumnRenamed("prediction","prediction2")
+
+      var result = normal_classification.join(anonym_classification, normal_classification("id") === anonym_classification("id2"),"inner")
+      result = result.withColumn("similarity",isValueSimilar(col("prediction"),col("prediction2")))
+      result = result.filter(col("similarity").contains(true)).select( (count("similarity")/num_sample_datas).as("PercentageSimilarityClassification"))
+
+      result.coalesce(1) //Accuracy
+            .write
+            .option("header","true")
+            .option("sep",",")
+            .mode("overwrite")
+            .csv(outputPath+"percentage-similarity-classification")
+    }
 
   }
+
+  def isValueSimilar = udf ( (value1: String,value2: String) => {
+    value1 != value2
+  })
 
   def list_of_predictor_attribute(spark: SparkSession, record: DataFrame): List[String] = {
     record.createOrReplaceTempView("tAdults")

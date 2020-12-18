@@ -252,6 +252,8 @@
 [0m[[0m[0mdebug[0m] [0m[0m	  C:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\target\scala-2.11\classes\ExaminationModel\MainExamination$$anonfun$11.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	ExaminationModel\MainExamination$$anonfun$12.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	  C:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\target\scala-2.11\classes\ExaminationModel\MainExamination$$anonfun$12.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	ExaminationModel\MainExamination$$anonfun$13.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  C:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\target\scala-2.11\classes\ExaminationModel\MainExamination$$anonfun$13.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	ExaminationModel\MainExamination$$anonfun$2.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	  C:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\target\scala-2.11\classes\ExaminationModel\MainExamination$$anonfun$2.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	ExaminationModel\MainExamination$$anonfun$3.class[0m
@@ -284,6 +286,10 @@
 [0m[[0m[0mdebug[0m] [0m[0m	  C:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\target\scala-2.11\classes\ExaminationModel\MainExamination$$anonfun$get_attribute_datatype_json$1.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	ExaminationModel\MainExamination$$anonfun$get_attribute_name_json$1.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	  C:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\target\scala-2.11\classes\ExaminationModel\MainExamination$$anonfun$get_attribute_name_json$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	ExaminationModel\MainExamination$$anonfun$main$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  C:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\target\scala-2.11\classes\ExaminationModel\MainExamination$$anonfun$main$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	ExaminationModel\MainExamination$$anonfun$main$2.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  C:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\target\scala-2.11\classes\ExaminationModel\MainExamination$$anonfun$main$2.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	ExaminationModel\MainExamination$$anonfun$min_max_cluster$1.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	  C:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\target\scala-2.11\classes\ExaminationModel\MainExamination$$anonfun$min_max_cluster$1.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	ExaminationModel\MainExamination$$anonfun$min_max_cluster$2.class[0m
@@ -306,8 +312,12 @@
 [0m[[0m[0mdebug[0m] [0m[0m	  C:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\target\scala-2.11\classes\ExaminationModel\NaiveBayesModel$$anonfun$1.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	ExaminationModel\NaiveBayesModel$$anonfun$2.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	  C:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\target\scala-2.11\classes\ExaminationModel\NaiveBayesModel$$anonfun$2.class[0m
-[0m[[0m[0mdebug[0m] [0m[0m	ExaminationModel\NaiveBayesModel$$typecreator5$1.class[0m
-[0m[[0m[0mdebug[0m] [0m[0m	  C:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\target\scala-2.11\classes\ExaminationModel\NaiveBayesModel$$typecreator5$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	ExaminationModel\NaiveBayesModel$$anonfun$getLabelFromNumeric$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  C:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\target\scala-2.11\classes\ExaminationModel\NaiveBayesModel$$anonfun$getLabelFromNumeric$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	ExaminationModel\NaiveBayesModel$$typecreator1$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  C:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\target\scala-2.11\classes\ExaminationModel\NaiveBayesModel$$typecreator1$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	ExaminationModel\NaiveBayesModel$$typecreator6$1.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  C:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\target\scala-2.11\classes\ExaminationModel\NaiveBayesModel$$typecreator6$1.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	ExaminationModel\NaiveBayesModel.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	  C:\Users\asus\IdeaProjects\BigData-GreedyKMemberClustering-KAnonymity\target\scala-2.11\classes\ExaminationModel\NaiveBayesModel.class[0m
 [0m[[0m[0mdebug[0m] [0m[0m	ExploratoryModel[0m
